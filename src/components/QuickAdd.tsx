@@ -15,6 +15,8 @@ export function QuickAdd({ snap }: { snap: Snapshot }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (!entry || !accountId) return
+    // Clear before the async write so text typed meanwhile is not wiped afterwards.
+    setText('')
     await addTx({
       date: entry.date,
       kind: entry.kind,
@@ -23,7 +25,6 @@ export function QuickAdd({ snap }: { snap: Snapshot }) {
       categoryId: entry.categoryId,
       note: entry.note || undefined,
     })
-    setText('')
   }
 
   return (
