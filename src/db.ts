@@ -26,6 +26,11 @@ export const newId = () => crypto.randomUUID()
 
 type SeedCat = [name: string, color: string, keywords: string[]]
 
+const CARD_KEYWORDS = [
+  'kredi kartı', 'kart ödemesi', 'kart borcu', 'ekstre', 'axess', 'bonus', 'world', 'maximum', 'paraf', 'cardfinans',
+  'advantage', 'bankkart',
+]
+
 const EXPENSE: SeedCat[] = [
   ['Market', '#16a34a', ['market', 'migros', 'bim', 'a101', 'şok', 'carrefour', 'manav', 'kasap', 'fırın', 'bakkal']],
   ['Fatura', '#0891b2', ['fatura', 'elektrik', 'su', 'doğalgaz', 'internet', 'telefon', 'gsm', 'aidat']],
@@ -36,7 +41,8 @@ const EXPENSE: SeedCat[] = [
   ['Eğlence', '#db2777', ['sinema', 'netflix', 'spotify', 'konser', 'oyun', 'tatil', 'eğlence']],
   ['Giyim', '#ca8a04', ['giyim', 'ayakkabı', 'kıyafet', 'zara', 'lcw', 'mavi', 'koton']],
   ['Eğitim', '#0d9488', ['okul', 'kurs', 'kitap', 'eğitim', 'kırtasiye']],
-  ['Kredi', '#475569', ['kredi', 'taksit', 'kart ödemesi']],
+  ['Kredi', '#475569', ['kredi', 'taksit']],
+  ['Kredi kartı', '#9333ea', CARD_KEYWORDS],
   ['Diğer', '#64748b', []],
 ]
 
@@ -52,6 +58,20 @@ export function defaultCategories(): Category[] {
     ...INCOME.map(([name, color, keywords]): Category => ({ id: newId(), name, kind: 'income', color, keywords })),
   ]
 }
+
+// v3: "Kredi kartı" expense category for databases seeded before it existed (skipped if a category of that name exists).
+db.version(3).upgrade(async (tx) => {
+  const cats = tx.table<Category, string>('categories')
+  const all = await cats.toArray()
+  const lower = (s: string) => s.toLocaleLowerCase('tr-TR')
+  const kredi = all.find((c) => c.kind === 'expense' && lower(c.name) === 'kredi')
+  if (kredi?.keywords?.includes('kart ödemesi')) {
+    await cats.update(kredi.id, { keywords: kredi.keywords.filter((k) => k !== 'kart ödemesi') })
+  }
+  if (!all.some((c) => lower(c.name) === 'kredi kartı')) {
+    await cats.add({ id: newId(), name: 'Kredi kartı', kind: 'expense', color: '#9333ea', keywords: CARD_KEYWORDS })
+  }
+})
 
 db.on('populate', (tx) => {
   tx.table('categories').bulkAdd(defaultCategories())

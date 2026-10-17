@@ -11,6 +11,7 @@ beforeAll(async () => {
   v1.version(1).stores({ accounts: 'id', transactions: 'id, date, accountId, toAccountId, occurrenceKey', plans: 'id, kind, accountId', categories: 'id, kind' })
   await v1.table('accounts').add({ id: 'b', name: 'Banka', kind: 'bank', openingBalance: 1000, openingDate: '2026-10-01' })
   await v1.table('transactions').add({ id: 'x', date: '2026-10-02', kind: 'expense', amount: 10, accountId: 'b', createdAt: 0 })
+  await v1.table('categories').add({ id: 'k', name: 'Kredi', kind: 'expense', keywords: ['kredi', 'taksit', 'kart ödemesi'] })
   v1.close()
   mod = await import('./db')
   actions = await import('./actions')
@@ -21,6 +22,12 @@ describe('db v2', () => {
     expect(await mod.db.accounts.toArray()).toMatchObject([{ id: 'b' }])
     expect(await mod.db.transactions.get('x')).toMatchObject({ amount: 10 })
     expect(await mod.db.debts.count()).toBe(0)
+  })
+
+  it('v3 adds the Kredi kartı category once and moves "kart ödemesi" off Kredi', async () => {
+    const cats = await mod.db.categories.toArray()
+    expect(cats.filter((c) => c.name === 'Kredi kartı')).toMatchObject([{ kind: 'expense' }])
+    expect(cats.find((c) => c.id === 'k')?.keywords).toEqual(['kredi', 'taksit'])
   })
 
   it('debt principal tx sync, payments and delete', async () => {

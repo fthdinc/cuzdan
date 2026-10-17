@@ -31,6 +31,17 @@ export function TxFormSheet({ snap, tx, onClose }: { snap: Snapshot; tx?: Transa
   const accFilter = kind === 'income' ? isLiquid : undefined
   const showAccount = kind === 'transfer' || needsAccountPicker(snap.accounts, accFilter)
   const catKind = kind === 'income' || kind === 'expense' ? kind : null
+  // Paying a card that is tracked in Kartlar must be a transfer, otherwise its purchases are counted twice.
+  const cards = snap.accounts.filter((a) => a.kind === 'credit_card' && !a.archived)
+  const isCardPayment = kind === 'expense' && cards.length > 0 &&
+    snap.categories.find((c) => c.id === categoryId)?.name.toLocaleLowerCase('tr-TR') === 'kredi kartı'
+  const toCardTransfer = () => {
+    const words = note.toLocaleLowerCase('tr-TR')
+    setKind('transfer')
+    setToAccountId((cards.find((c) => words.includes(c.name.toLocaleLowerCase('tr-TR'))) ?? cards[0]).id)
+    setAccountId(pickAccount(snap.accounts, accountId, isLiquid))
+    setCategoryId('')
+  }
 
   const changeNote = (v: string) => {
     setNote(v)
@@ -106,6 +117,15 @@ export function TxFormSheet({ snap, tx, onClose }: { snap: Snapshot; tx?: Transa
         >
           <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </Field>
+        {isCardPayment && (
+          <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+            Kartlarını Kartlar ekranında takip ediyorsan kart ödemesini gider değil transfer olarak gir; yoksa kart
+            harcamaların iki kez sayılır.
+            <button type="button" className="mt-2 block font-semibold underline" onClick={toCardTransfer}>
+              Kart ödemesi (transfer) olarak kaydet
+            </button>
+          </div>
+        )}
         {tx?.occurrenceKey && <div className="text-xs text-slate-500">Bu işlem bir plan vadesini kapatıyor. Silinirse vade tekrar bekliyor olur.</div>}
         <FormError msg={err} />
         <div className="flex gap-2">
