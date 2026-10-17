@@ -12,6 +12,8 @@ import { PlanDetailPage } from './pages/PlanDetail'
 import { CardsPage } from './pages/Cards'
 import { SettingsPage } from './pages/Settings'
 import { ImportPage } from './pages/Import'
+import { BillsPage } from './pages/Bills'
+import { BillDetailPage } from './pages/BillDetail'
 
 /** Loads the snapshot and shows the first-run guide until an account exists (Ayarlar stays reachable). */
 function WithSnapshot({ children }: { children: (snap: Snapshot) => ReactNode }) {
@@ -33,7 +35,7 @@ function Welcome() {
       </p>
       <ol className="mx-auto mt-4 max-w-xs space-y-1 text-left text-sm text-slate-600 dark:text-slate-300">
         <li>1. Hesaplarını ekle</li>
-        <li>2. Kredi, taksit ve faturalarını Planlar'a bir kez tanımla</li>
+        <li>2. Faturalarını, kredi ve taksitlerini bir kez tanımla</li>
         <li>3. Harcamaları hızlı ekle çubuğuyla gir</li>
       </ol>
       <button className="btn btn-primary mt-6 w-full" onClick={() => setOpen(true)}>Hesap ekle</button>
@@ -50,6 +52,8 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={page((s) => <SummaryPage snap={s} />)} />
           <Route path="islemler" element={page((s) => <TransactionsPage snap={s} />)} />
+          <Route path="faturalar" element={page((s) => <BillsPage snap={s} />)} />
+          <Route path="faturalar/:id" element={page((s) => <BillDetailPage snap={s} />)} />
           <Route path="planlar" element={page((s) => <PlansPage snap={s} />)} />
           <Route path="planlar/:id" element={page((s) => <PlanDetailPage snap={s} />)} />
           <Route path="kartlar" element={page((s) => <CardsPage snap={s} />)} />

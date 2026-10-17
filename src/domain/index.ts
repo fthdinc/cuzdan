@@ -10,7 +10,14 @@ export { parseMoney, formatMoney } from './money'
 export { addMonths, addDays, todayISO } from './dates'
 
 // --- plans / occurrences ---
-export { loanFromRemaining, annuityInstallment, occurrencesForPlan, loanProgress } from './plans'
+export { loanFromRemaining, annuityInstallment, occurrencesForPlan, loanProgress, estimatedBillAmount } from './plans'
+
+// --- bills (recurring_expense plans) ---
+export { billInfo, billHistory, billThisMonth, changeRatio, type BillMonth, type BillMonthState } from './bills'
+export {
+  BILL_PROVIDERS, BILL_TYPE_LABEL, detectBill, matchesKeywords, findProvider, billKeywords, billDefaultName,
+  type BillProvider, type DetectedBill,
+} from './billProviders'
 
 // --- cards ---
 export { cardStatements, accountBalance, cardFutureInstallments, minPaymentRate, installmentSchedule } from './cards'

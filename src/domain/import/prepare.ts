@@ -1,13 +1,16 @@
 // Matching parsed statement rows against the app's data. Pure.
+import { billDefaultName, billKeywords, detectBill, matchesKeywords, type DetectedBill } from '../billProviders'
 import { accountBalance, cardStatements } from '../cards'
-import { dateInMonth, monthIndex, ymd } from '../dates'
-import type { Account, CardInstallmentPlan, ID, ISODate, Kurus, Snapshot, Transaction } from '../types'
+import { addDays, dateInMonth, monthIndex, ymd } from '../dates'
+import { occurrencesForPlan } from '../plans'
+import type { Account, CardInstallmentPlan, ID, ISODate, Kurus, Occurrence, RecurringPlan, Snapshot, Transaction } from '../types'
 import { suggestCategory } from './category'
 import type { ParsedRow, ParsedStatement, StatementMeta } from './statement'
 import { fold } from './text'
 
 export type ImportKind = 'income' | 'expense' | 'transfer'
 export type PlanDraft = Omit<CardInstallmentPlan, 'id' | 'createdAt'>
+export type BillPlanDraft = Omit<RecurringPlan, 'id' | 'createdAt'>
 
 export interface ImportRow {
   id: number
@@ -25,6 +28,13 @@ export interface ImportRow {
     coveredBy?: ID | 'file' // existing plan id, or an earlier row of this file creating the same plan
     plan?: PlanDraft // proposal when not covered
   }
+  // Debit row paying an existing bill plan. occurrenceKey: the occurrence this row settles; absent when the
+  // matching occurrence is already paid (then the row is flagged duplicate).
+  bill?: { planId: ID; planName: string; occurrenceKey?: string }
+  // Bill without a plan: "Fatura olarak takip et" proposal (track = user toggle, default on).
+  billProposal?: { plan: BillPlanDraft; track: boolean }
+  // Later month of the same new bill in this file: settles occurrence `index` of row `rowId`'s proposed plan.
+  billFollows?: { rowId: number; index: number }
 }
 
 export interface Reconciliation {
@@ -64,6 +74,8 @@ function effect(t: Transaction, accountId: ID): number | null {
 }
 
 const PAYMENT = /odeme|tahsilat|havale|eft|fast/
+const BILL_WINDOW = 20 // days between a bill's due date and the statement row
+const unpaid = (o: Occurrence) => o.status === 'pending' || o.status === 'overdue' || o.status === 'autopay_pending'
 const NOT_PAYMENT = /iade|iptal/
 
 /**
@@ -77,6 +89,12 @@ const NOT_PAYMENT = /iade|iptal/
  * that part billed within a month of this statement, the row is 'covered' and skipped (the engine already
  * bills plan parts). Otherwise a plan is proposed (mode 'plan') so the current part lands in this statement;
  * parts billed before the card's tracking start become preSettledCount.
+ * Bills (debit rows that are not duplicates / before opening): if a recurring_expense plan's keywords
+ * (billKeywords) match the description, the row settles the nearest unpaid occurrence within ±20 days
+ * (a plan whose subscriberNo appears in the description wins; each occurrence is claimed once per file);
+ * if only a paid one is that close, the row is a duplicate. Rows matching the provider catalog / generic
+ * "fatura" patterns with no matching plan get a bill plan proposal; later months of the same bill in the
+ * file follow that proposal.
  */
 export function prepareImport(parsed: ParsedStatement, account: Account, snap: Snapshot, today: ISODate, opts: PrepareOptions = {}): PreparedImport {
   const isCard = account.kind === 'credit_card' && !!account.card
@@ -89,6 +107,45 @@ export function prepareImport(parsed: ParsedStatement, account: Account, snap: S
   const seen = new Set<string>()
   const newPlans = new Map<string, number>()
   const plans = snap.plans.filter((p): p is CardInstallmentPlan => p.kind === 'card_installment' && p.accountId === account.id)
+  const billPlans = snap.plans
+    .filter((p): p is RecurringPlan => p.kind === 'recurring_expense' && p.active)
+    .map((plan) => ({ plan, keywords: billKeywords(plan) }))
+    .filter((x) => x.keywords.length > 0)
+  const claimed = new Set<string>()
+  const detected = new Map<number, DetectedBill>() // rows to propose a new bill for
+
+  const linkBill = (out: ImportRow) => {
+    const { row } = out
+    const candidates = billPlans.filter((x) => matchesKeywords(row.description, x.keywords))
+    if (!candidates.length) {
+      const d = detectBill(row.description)
+      if (d) detected.set(out.id, d)
+      return
+    }
+    const digits = row.description.replace(/\D/g, '')
+    let best: { plan: RecurringPlan; o: Occurrence; score: number } | undefined
+    let paid: RecurringPlan | undefined
+    for (const { plan } of candidates) {
+      const sub = plan.bill?.subscriberNo?.replace(/\D/g, '')
+      const subMatch = !!sub && digits.includes(sub)
+      for (const o of occurrencesForPlan(plan, snap, today, addDays(row.date, BILL_WINDOW))) {
+        const d = Math.abs(dayDiff(o.dueDate, row.date))
+        if (d > BILL_WINDOW) continue
+        if (o.status === 'paid') paid ??= plan
+        if (!unpaid(o) || claimed.has(o.key)) continue
+        const score = d - (subMatch ? 1000 : 0)
+        if (!best || score < best.score) best = { plan, o, score }
+      }
+    }
+    if (best) {
+      claimed.add(best.o.key)
+      out.bill = { planId: best.plan.id, planName: best.plan.name, occurrenceKey: best.o.key }
+      out.categoryId = best.plan.categoryId ?? out.categoryId
+    } else if (paid) {
+      out.bill = { planId: paid.id, planName: paid.name }
+      out.duplicate = 'existing'
+    }
+  }
 
   const rows = parsed.rows.map((row, id): ImportRow => {
     const credit = row.direction === 'credit'
@@ -146,15 +203,54 @@ export function prepareImport(parsed: ParsedStatement, account: Account, snap: S
       out.duplicate = 'existing'
     } else if (seen.has(fileKey)) out.duplicate = 'file'
     seen.add(fileKey)
+    if (!credit && !out.duplicate && !out.beforeOpening) linkBill(out)
     out.include = out.duplicate !== 'existing' && !out.beforeOpening
     return out
   })
+
+  // Proposals: one new plan per detected bill (earliest row); later months of the same bill follow it.
+  const fatura = snap.categories.find((c) => c.kind === 'expense' && c.name === 'Fatura')?.id
+  const groups = new Map<string, ImportRow[]>()
+  for (const [id, d] of detected) {
+    const key = d.provider ?? `${d.type}|${d.keywords.join(',')}`
+    groups.set(key, [...(groups.get(key) ?? []), rows[id]])
+  }
+  for (const group of groups.values()) {
+    group.sort((a, b) => (a.row.date < b.row.date ? -1 : a.row.date > b.row.date ? 1 : a.id - b.id))
+    const lead = group[0]
+    const d = detected.get(lead.id)!
+    lead.categoryId ??= fatura
+    lead.billProposal = {
+      track: true,
+      plan: {
+        kind: 'recurring_expense',
+        name: d.provider ? billDefaultName(d.type, d.provider) : lead.row.description.slice(0, 40),
+        accountId: account.id,
+        categoryId: lead.categoryId,
+        active: true,
+        amount: lead.row.amount,
+        variable: true,
+        frequency: 'monthly',
+        startDate: lead.row.date,
+        settledBefore: lead.row.date,
+        bill: { type: d.type, provider: d.provider, autopay: d.autopay, matchKeywords: d.keywords },
+      },
+    }
+    const months = new Set([monthIndex(lead.row.date)])
+    for (const r of group.slice(1)) {
+      const mi = monthIndex(r.row.date)
+      if (months.has(mi)) continue
+      months.add(mi)
+      r.billFollows = { rowId: lead.id, index: mi - monthIndex(lead.row.date) }
+      r.categoryId ??= lead.categoryId
+    }
+  }
   return { rows, reconciliation: reconcile(parsed.meta, account, snap, today) }
 }
 
 export interface BuiltImport {
   transactions: Transaction[]
-  plans: CardInstallmentPlan[]
+  plans: (CardInstallmentPlan | RecurringPlan)[]
 }
 
 /**
@@ -166,13 +262,25 @@ export function buildImport(rows: ImportRow[], account: Account, o: {
   adjustment?: { amount: Kurus; date: ISODate }
 }): BuiltImport {
   const transactions: Transaction[] = []
-  const plans: CardInstallmentPlan[] = []
+  const plans: (CardInstallmentPlan | RecurringPlan)[] = []
+  // Bill proposals that will be created (included expense rows with track on): row id -> plan id.
+  const billPlanIds = new Map<number, ID>()
+  for (const r of rows) {
+    if (!r.include || r.mode !== 'tx' || r.kind !== 'expense' || !r.billProposal?.track) continue
+    const id = o.makeId()
+    billPlanIds.set(r.id, id)
+    plans.push({ ...r.billProposal.plan, categoryId: r.categoryId, id, createdAt: o.now, importId: o.importId })
+  }
   for (const r of rows) {
     if (!r.include) continue
     if (r.mode === 'plan' && r.installment?.plan) {
       plans.push({ ...r.installment.plan, categoryId: r.categoryId, id: o.makeId(), createdAt: o.now, importId: o.importId })
       continue
     }
+    const proposed = billPlanIds.get(r.id)
+    const follows = r.billFollows && billPlanIds.get(r.billFollows.rowId)
+    const occurrenceKey = r.kind !== 'expense' ? undefined
+      : r.bill?.occurrenceKey ?? (proposed ? `${proposed}:0` : follows ? `${follows}:${r.billFollows!.index}` : undefined)
     const transfer = r.kind === 'transfer' && o.paymentSourceId
     transactions.push({
       id: o.makeId(),
@@ -182,6 +290,7 @@ export function buildImport(rows: ImportRow[], account: Account, o: {
       accountId: transfer ? o.paymentSourceId! : account.id,
       ...(transfer ? { toAccountId: account.id } : r.categoryId ? { categoryId: r.categoryId } : {}),
       note: r.row.description,
+      ...(occurrenceKey ? { occurrenceKey } : {}),
       createdAt: o.now,
       importId: o.importId,
     })

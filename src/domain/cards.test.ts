@@ -158,11 +158,11 @@ describe('summaries', () => {
   it('upcoming: overdue + pending + latest closed statement, sorted', () => {
     const items = upcoming(snap, TODAY, '2026-11-16')
     expect(items.map((i) => [i.type, i.dueDate, i.amount])).toEqual([
-      ['occurrence', '2026-09-01', 50000],
+      ['occurrence', '2026-09-01', 12000], // variable bill: estimate = average of paid occurrences (e:1)
       ['occurrence', '2026-09-25', 4500000],
       ['statement', '2026-10-15', 156668],
       ['occurrence', '2026-10-25', 4500000],
-      ['occurrence', '2026-11-01', 50000],
+      ['occurrence', '2026-11-01', 12000],
     ])
   })
 

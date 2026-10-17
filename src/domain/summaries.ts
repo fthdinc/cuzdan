@@ -4,12 +4,13 @@ import { loanEnd, occurrencesForPlan } from './plans'
 import type { DebtSummary, ID, ISODate, Kurus, MonthSummary, Snapshot, UpcomingItem } from './types'
 
 const cards = (snap: Snapshot) => snap.accounts.filter((a) => a.kind === 'credit_card')
-const isOpen = (status: string) => status === 'pending' || status === 'overdue'
+// Unpaid occurrences. autopay_pending counts as unpaid (amount not entered yet) but never as overdue.
+const isOpen = (status: string) => status === 'pending' || status === 'overdue' || status === 'autopay_pending'
 
 /**
  * income/expense: tx dated in the month (transfers and adjustments excluded); expense also includes
  * card installment parts billed in statements whose kesim is in the month (category = plan.categoryId).
- * projectedIncome/Expense: pending/overdue occurrences due in the month. Card statements are not added:
+ * projectedIncome/Expense: pending/overdue/autopay_pending occurrences due in the month (variable bills at their estimate). Card statements are not added:
  * card expense tx and billed installment parts are already counted in expense.
  * byCategory: expenses grouped by categoryId (null = uncategorized), sorted by amount desc.
  */
@@ -53,7 +54,7 @@ export function monthSummary(snap: Snapshot, month: string, today: ISODate): Mon
 }
 
 /**
- * Pending/overdue occurrences with dueDate <= to (overdue ones included however old), plus per card
+ * Pending/overdue/autopay_pending occurrences with dueDate <= to (past-due ones included however old), plus per card
  * only the most recent closed statement if it is not 'paid' (amount = total - paid). Older statements
  * are skipped because their unpaid debt is carried into the newer statement's total.
  * Sorted by dueDate asc (income occurrences are included; check item.plan.kind).

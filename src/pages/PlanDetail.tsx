@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import {
   formatMoney, installmentSchedule, loanProgress, occurrencesForPlan, todayISO,
   type CardInstallmentPlan, type Occurrence, type Plan, type Snapshot,
@@ -18,6 +18,7 @@ export function PlanDetailPage({ snap }: { snap: Snapshot }) {
   const [editing, setEditing] = useState(false)
   const plan = snap.plans.find((p) => p.id === id)
   if (!plan) return <div className="card p-6 text-center text-sm text-slate-500">Plan bulunamadı. <Link className="text-indigo-600" to="/planlar">Planlara dön</Link></div>
+  if (plan.kind === 'recurring_expense') return <Navigate to={`/faturalar/${plan.id}`} replace />
 
   const tab = plan.kind
   const remove = async () => {
@@ -118,7 +119,8 @@ function Overview({ plan, snap }: { plan: Plan; snap: Snapshot }) {
   )
 }
 
-function OccurrenceList({ plan, snap }: { plan: Plan; snap: Snapshot }) {
+/** Occurrences with pay / skip / undo. Also used by the bill detail page. */
+export function OccurrenceList({ plan, snap }: { plan: Plan; snap: Snapshot }) {
   const today = todayISO()
   const { pay, sheet, busy } = usePay(snap)
   let occs = occurrencesForPlan(plan, snap, today, occurrenceHorizon(plan, today))
@@ -143,19 +145,25 @@ function OccurrenceList({ plan, snap }: { plan: Plan; snap: Snapshot }) {
               <div className="mt-0.5"><OccBadge status={o.status} /></div>
             </div>
             <div className="text-right">
-              <Amount
-                value={o.actual ?? o.expected}
-                tone={o.status === 'skipped' || o.status === 'presettled' ? 'neutral' : income ? 'income' : 'expense'}
-                className="text-sm font-medium"
-              />
+              {o.status === 'autopay_pending' ? (
+                <span className="text-sm tabular-nums text-slate-400">≈ {formatMoney(o.expected)}</span>
+              ) : (
+                <Amount
+                  value={o.actual ?? o.expected}
+                  tone={o.status === 'skipped' || o.status === 'presettled' ? 'neutral' : income ? 'income' : 'expense'}
+                  className="text-sm font-medium"
+                />
+              )}
               {o.actual !== undefined && o.actual !== o.expected && (
                 <div className="text-[11px] text-slate-400 tabular-nums">beklenen {formatMoney(o.expected)}</div>
               )}
             </div>
             <div className="flex shrink-0 gap-1">
-              {(o.status === 'pending' || o.status === 'overdue') && (
+              {(o.status === 'pending' || o.status === 'overdue' || o.status === 'autopay_pending') && (
                 <>
-                  <button className="btn btn-pay btn-sm" disabled={busy === o.key} onClick={() => pay({ type: 'occurrence', plan, occurrence: o })}>{income ? 'Alındı' : 'Öde'}</button>
+                  <button className={`btn btn-sm ${o.status === 'autopay_pending' ? 'btn-soft' : 'btn-pay'}`} disabled={busy === o.key} onClick={() => pay({ type: 'occurrence', plan, occurrence: o })}>
+                    {o.status === 'autopay_pending' ? 'Tutar gir' : income ? 'Alındı' : 'Öde'}
+                  </button>
                   <button className="btn btn-soft btn-sm" onClick={() => setSkipped(plan.id, o.index, true)}>Atla</button>
                 </>
               )}

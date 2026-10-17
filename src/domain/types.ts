@@ -87,6 +87,17 @@ export interface CardInstallmentPlan extends PlanBase {
   preSettledCount: number // parts already billed before tracking started
 }
 
+export type BillType = 'electricity' | 'water' | 'gas' | 'phone' | 'internet' | 'tv' | 'dues' | 'subscription' | 'other'
+
+/** Extra info on a recurring_expense plan managed as a bill (Faturalar). Plans without it count as type 'other', no autopay. */
+export interface BillInfo {
+  type: BillType
+  provider?: string // catalog provider name (billProviders.ts) or free text
+  subscriberNo?: string
+  autopay: boolean // otomatik ödeme talimatı: past-due unpaid occurrences are 'autopay_pending', not 'overdue'
+  matchKeywords: string[] // statement import: description contains one of these (diacritic-insensitive, whole words)
+}
+
 export interface RecurringPlan extends PlanBase {
   kind: 'recurring_expense' | 'recurring_income'
   amount: Kurus // expected
@@ -95,11 +106,13 @@ export interface RecurringPlan extends PlanBase {
   startDate: ISODate // first occurrence
   endDate?: ISODate
   settledBefore?: ISODate // occurrences due before this date are 'presettled' (history before tracking)
+  bill?: BillInfo // recurring_expense only
 }
 
 export type Plan = LoanPlan | CardInstallmentPlan | RecurringPlan
 
-export type OccurrenceStatus = 'paid' | 'pending' | 'overdue' | 'skipped' | 'presettled'
+// autopay_pending: unpaid, past due, on a bill with autopay (charged by the bank, amount not entered yet). Never overdue.
+export type OccurrenceStatus = 'paid' | 'pending' | 'overdue' | 'autopay_pending' | 'skipped' | 'presettled'
 
 export interface Occurrence {
   key: string // `${planId}:${index}`
@@ -147,7 +160,7 @@ export interface MonthSummary {
   expense: Kurus // expense tx + card installment parts billed in this month's statements
   net: Kurus
   projectedIncome: Kurus // pending recurring_income occurrences in month
-  projectedExpense: Kurus // pending/overdue loan + recurring_expense occurrences due in month (card spending is already in expense)
+  projectedExpense: Kurus // pending/overdue/autopay_pending loan + recurring_expense occurrences due in month (card spending is already in expense)
   byCategory: { categoryId: ID | null; amount: Kurus }[] // expenses only
 }
 

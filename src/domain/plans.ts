@@ -1,5 +1,5 @@
 import { addDays, addMonths, dateInMonth, monthIndex, ymd } from './dates'
-import type { ISODate, Kurus, LoanPlan, Occurrence, OccurrenceStatus, Plan, Snapshot } from './types'
+import type { ISODate, Kurus, LoanPlan, Occurrence, OccurrenceStatus, Plan, RecurringPlan, Snapshot } from './types'
 
 export function loanFromRemaining(input: {
   id: string; name: string; accountId: string; categoryId?: string; createdAt: number
@@ -48,12 +48,32 @@ function dueDateOf(plan: Plan, i: number): ISODate | null {
   }
 }
 
+/**
+ * Expected amount of a recurring plan's next unpaid occurrences. Variable recurring_expense (bill): average of
+ * the actual amounts of the last 3 paid occurrences (by index), rounded; plan.amount when none is paid.
+ * Fixed plans and income: plan.amount.
+ */
+export function estimatedBillAmount(plan: RecurringPlan, snap: Snapshot): Kurus {
+  if (plan.kind !== 'recurring_expense' || !plan.variable) return plan.amount
+  const prefix = `${plan.id}:`
+  const paid = snap.transactions
+    .filter((t) => t.occurrenceKey?.startsWith(prefix))
+    .map((t) => ({ i: Number(t.occurrenceKey!.slice(prefix.length)), amount: t.amount }))
+    .sort((a, b) => b.i - a.i)
+    .slice(0, 3)
+  return paid.length ? Math.round(paid.reduce((s, x) => s + x.amount, 0) / paid.length) : plan.amount
+}
+
 /** Occurrences regardless of plan.active. */
-function generate(plan: Plan, snap: Snapshot, today: ISODate, until: ISODate): Occurrence[] {
+export function generate(plan: Plan, snap: Snapshot, today: ISODate, until: ISODate): Occurrence[] {
   const out: Occurrence[] = []
+  const recurring = plan.kind === 'recurring_expense' || plan.kind === 'recurring_income'
   const baseAmount = plan.kind === 'loan' ? plan.installmentAmount : plan.kind === 'card_installment' ? 0 : plan.amount
+  // Unpaid occurrences of variable bills expect the recent average instead of the stored estimate.
+  const openAmount = recurring ? estimatedBillAmount(plan, snap) : baseAmount
   const preSettled = plan.kind === 'loan' ? plan.preSettledCount : 0
-  const settledBefore = plan.kind === 'recurring_expense' || plan.kind === 'recurring_income' ? plan.settledBefore : undefined
+  const settledBefore = recurring ? plan.settledBefore : undefined
+  const autopay = plan.kind === 'recurring_expense' && !!plan.bill?.autopay
   for (let i = 0; ; i++) {
     const dueDate = dueDateOf(plan, i)
     if (dueDate === null || dueDate > until) break
@@ -65,11 +85,12 @@ function generate(plan: Plan, snap: Snapshot, today: ISODate, until: ISODate): O
     else if (tx) status = 'paid'
     else if (settledBefore && dueDate < settledBefore) status = 'presettled'
     else if (override?.skipped) status = 'skipped'
-    else if (dueDate < today) status = 'overdue'
+    else if (dueDate < today) status = autopay ? 'autopay_pending' : 'overdue'
     else status = 'pending'
+    const open = status === 'pending' || status === 'overdue' || status === 'autopay_pending'
     const occ: Occurrence = {
       key, planId: plan.id, planKind: plan.kind, index: i, dueDate,
-      expected: override?.amount ?? baseAmount, status,
+      expected: override?.amount ?? (open ? openAmount : baseAmount), status,
     }
     if (status === 'paid' && tx) {
       occ.transactionId = tx.id

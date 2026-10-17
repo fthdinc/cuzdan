@@ -262,6 +262,7 @@ const CHIP = {
   amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
   gray: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
   indigo: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300',
+  sky: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300',
 }
 const Chip = ({ tone, children }: { tone: keyof typeof CHIP; children: ReactNode }) =>
   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${CHIP[tone]}`}>{children}</span>
@@ -297,6 +298,8 @@ function PreviewStep({ snap, account, parsed, lines, sourceName, onImported }: {
 
   const txCount = built.transactions.length + (adjustment ? 1 : 0)
   const planCount = built.plans.length
+  const billCount = built.plans.filter((p) => p.kind === 'recurring_expense').length
+  const linkedCount = built.transactions.filter((t) => t.occurrenceKey).length
   const skipped = rows.filter((r) => !r.include).length
 
   const doImport = async () => {
@@ -383,6 +386,8 @@ function PreviewStep({ snap, account, parsed, lines, sourceName, onImported }: {
         <ul className="divide-y divide-slate-100 dark:divide-slate-800">
           {rows.map((r) => (
             <PreviewRow key={r.id} r={r} snap={snap} isCard={isCard} transferOk={!!paymentSourceId}
+              lead={r.billFollows ? rows[r.billFollows.rowId] : undefined}
+              onTrack={(track) => r.billProposal && update(r.id, { billProposal: { ...r.billProposal, track } })}
               onInclude={(v) => update(r.id, { include: v })} onKind={(k) => setKind(r, k)}
               onCategory={(c) => update(r.id, { categoryId: c || undefined })} onMode={(mode) => update(r.id, { mode })} />
           ))}
@@ -392,7 +397,9 @@ function PreviewStep({ snap, account, parsed, lines, sourceName, onImported }: {
 
       <div className="card sticky bottom-20 z-10 flex flex-wrap items-center justify-between gap-3 p-4 md:bottom-4">
         <div className="text-sm">
-          <b>{txCount}</b> işlem{planCount > 0 && <> ve <b>{planCount}</b> taksit planı</>} eklenecek, <b>{skipped}</b> satır atlanacak
+          <b>{txCount}</b> işlem{planCount - billCount > 0 && <>, <b>{planCount - billCount}</b> taksit planı</>}
+          {billCount > 0 && <>, <b>{billCount}</b> yeni fatura</>} eklenecek, <b>{skipped}</b> satır atlanacak
+          {linkedCount > 0 && <div className="text-xs text-slate-500">{linkedCount} işlem faturalara bağlanacak (vade ödendi olur)</div>}
         </div>
         <button className="btn btn-primary" disabled={saving || txCount + planCount === 0} onClick={() => void doImport()}>
           {saving ? 'Kaydediliyor...' : 'İçe aktar'}
@@ -416,9 +423,9 @@ function ExtractedText({ lines }: { lines: string[] }) {
   )
 }
 
-function PreviewRow({ r, snap, isCard, transferOk, onInclude, onKind, onCategory, onMode }: {
-  r: ImportRow; snap: Snapshot; isCard: boolean; transferOk: boolean
-  onInclude: (v: boolean) => void; onKind: (k: ImportKind) => void; onCategory: (id: string) => void; onMode: (m: 'tx' | 'plan') => void
+function PreviewRow({ r, snap, isCard, transferOk, lead, onTrack, onInclude, onKind, onCategory, onMode }: {
+  r: ImportRow; snap: Snapshot; isCard: boolean; transferOk: boolean; lead?: ImportRow
+  onTrack: (track: boolean) => void; onInclude: (v: boolean) => void; onKind: (k: ImportKind) => void; onCategory: (id: string) => void; onMode: (m: 'tx' | 'plan') => void
 }) {
   const plan = r.installment?.plan
   const coveredPlan = r.installment?.coveredBy && r.installment.coveredBy !== 'file'
@@ -429,6 +436,8 @@ function PreviewRow({ r, snap, isCard, transferOk, onInclude, onKind, onCategory
     ...(isCard && transferOk && r.row.direction === 'credit' ? [{ value: 'transfer' as const, label: 'Transfer' }] : []),
   ]
   const asPlan = r.mode === 'plan' && !!plan
+  const expense = r.kind === 'expense'
+  const leadPlan = lead?.include && lead.kind === 'expense' && lead.billProposal?.track ? lead.billProposal.plan : undefined
   return (
     <li className={`flex gap-3 py-3 ${r.include ? '' : 'opacity-55'}`}>
       <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-indigo-600" checked={r.include} onChange={(e) => onInclude(e.target.checked)} aria-label="Dahil et" />
@@ -443,6 +452,10 @@ function PreviewRow({ r, snap, isCard, transferOk, onInclude, onKind, onCategory
               {r.beforeOpening && <Chip tone="gray">Açılıştan önce</Chip>}
               {r.installment && <Chip tone="indigo">{r.installment.current}/{r.installment.total} taksit</Chip>}
               {r.installment?.coveredBy && <Chip tone="gray">{coveredPlan ? `Taksit planında: ${coveredPlan.name}` : 'Taksit planında'}</Chip>}
+              {r.bill?.occurrenceKey && expense && <Chip tone="sky">Fatura: {r.bill.planName}</Chip>}
+              {r.bill && !r.bill.occurrenceKey && <Chip tone="amber">Fatura zaten ödendi: {r.bill.planName}</Chip>}
+              {r.billProposal?.track && r.include && expense && <Chip tone="sky">Yeni fatura: {r.billProposal.plan.name}</Chip>}
+              {leadPlan && expense && <Chip tone="sky">Yeni fatura: {leadPlan.name}</Chip>}
               {r.row.foreign && <Chip tone="gray">{r.row.foreign.currency} {formatMoney(r.row.foreign.amount).replace(' ₺', '')}</Chip>}
             </div>
           </div>
@@ -469,6 +482,15 @@ function PreviewRow({ r, snap, isCard, transferOk, onInclude, onKind, onCategory
                     Bunun yerine taksit planı oluştur
                   </button>
                 )}
+                {r.billProposal && expense && (
+                  <label className="flex items-start gap-2 rounded-xl bg-sky-50/70 p-2 text-xs text-slate-600 dark:bg-sky-950/30 dark:text-slate-300 sm:col-span-2">
+                    <input type="checkbox" className="mt-0.5 accent-sky-600" checked={r.billProposal.track} onChange={(e) => onTrack(e.target.checked)} />
+                    <span>
+                      <b>Fatura olarak takip et:</b> "{r.billProposal.plan.name}" faturası oluşturulur (aylık, tahmini {formatMoney(r.billProposal.plan.amount)}
+                      {r.billProposal.plan.bill?.autopay && ', otomatik ödeme talimatlı'}) ve bu satır ilk vadesine bağlanır.
+                    </span>
+                  </label>
+                )}
                 {r.installment?.coveredBy && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 sm:col-span-2">Bu taksit plan tarafından zaten ekstreye yansıtılıyor; işlem olarak eklemek çift sayar.</p>
                 )}
@@ -488,7 +510,7 @@ function DoneStep({ step, account, onUndone, onRestart }: {
 }) {
   const [busy, setBusy] = useState(false)
   const undo = async () => {
-    if (!confirm('Bu içe aktarmada eklenen tüm işlemler ve taksit planları silinsin mi?')) return
+    if (!confirm('Bu içe aktarmada eklenen tüm işlemler, taksit planları ve faturalar silinsin mi?')) return
     setBusy(true)
     try { onUndone(await undoImport(step.importId)) } finally { setBusy(false) }
   }
@@ -500,7 +522,7 @@ function DoneStep({ step, account, onUndone, onRestart }: {
         <>
           <p className="text-sm">
             <span className="text-emerald-600 dark:text-emerald-400">✓</span> {account?.name ?? 'Hesap'} için <b>{step.txCount}</b> işlem
-            {step.planCount > 0 && <> ve <b>{step.planCount}</b> taksit planı</>} eklendi.
+            {step.planCount > 0 && <> ve <b>{step.planCount}</b> plan (taksit / fatura)</>} eklendi.
           </p>
           <button className="btn btn-danger mt-3" disabled={busy} onClick={() => void undo()}>Bu içe aktarmayı geri al</button>
         </>
@@ -508,6 +530,7 @@ function DoneStep({ step, account, onUndone, onRestart }: {
       <div className="mt-4 flex flex-wrap gap-2">
         <Link to="/islemler" className="btn btn-soft">İşlemlere git</Link>
         {account?.kind === 'credit_card' && <Link to="/kartlar" className="btn btn-soft">Kartlara git</Link>}
+        <Link to="/faturalar" className="btn btn-soft">Faturalara git</Link>
         <button className="btn btn-ghost" onClick={onRestart}>Yeni içe aktarma</button>
       </div>
     </Section>

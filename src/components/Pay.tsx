@@ -8,9 +8,9 @@ export type PayTarget =
   | { type: 'occurrence'; plan: Plan; occurrence: Occurrence }
   | { type: 'statement'; card: Account; statement: CardStatement }
 
-/** Fixed-amount occurrences are paid in one tap; variable ones and card statements ask first. */
+/** Fixed-amount occurrences are paid in one tap; variable / autopay-pending ones and card statements ask first. */
 function needsSheet(t: PayTarget): boolean {
-  if (t.type === 'statement') return true
+  if (t.type === 'statement' || t.occurrence.status === 'autopay_pending') return true
   return t.plan.kind === 'recurring_expense' || t.plan.kind === 'recurring_income' ? t.plan.variable : false
 }
 
@@ -47,15 +47,17 @@ export function usePay(snap: Snapshot): { pay: (t: PayTarget) => void; sheet: Re
 
 function PaySheet({ snap, target, onClose }: { snap: Snapshot; target: PayTarget; onClose: () => void }) {
   const isStmt = target.type === 'statement'
+  // Autopay: the bank already charged it on the due date; ask for the real amount (estimate only as a hint).
+  const autopay = !isStmt && target.occurrence.status === 'autopay_pending'
   const nonCards = snap.accounts.filter((a) => a.kind !== 'credit_card' && !a.archived)
   const [amount, setAmount] = useState(() =>
-    moneyToInput(isStmt ? Math.max(0, target.statement.total - target.statement.paid) : target.occurrence.expected),
+    autopay ? '' : moneyToInput(isStmt ? Math.max(0, target.statement.total - target.statement.paid) : target.occurrence.expected),
   )
   const accFilter = isStmt ? (a: Account) => a.kind !== 'credit_card' : undefined
   const [accountId, setAccountId] = useState(() =>
     isStmt ? (lastAccountId(nonCards) ?? '') : eligibleAccount(snap.accounts, target.plan.accountId),
   )
-  const [date, setDate] = useState(todayISO)
+  const [date, setDate] = useState(() => (autopay ? target.occurrence.dueDate : todayISO()))
   const [err, setErr] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -88,9 +90,14 @@ function PaySheet({ snap, target, onClose }: { snap: Snapshot; target: PayTarget
             <span className="tabular-nums">{formatMoney(target.statement.minPayment)}</span>
           </div>
         ) : (
-          <div className="text-sm text-slate-500">Vade {fmtDate(target.occurrence.dueDate)}</div>
+          <div className="text-sm text-slate-500">
+            Vade {fmtDate(target.occurrence.dueDate)}
+            {autopay && <> · Otomatik ödeme talimatıyla ödendi. Bankanın kestiği tutarı girin (SMS / ekstre).</>}
+          </div>
         )}
-        <Field label="Tutar"><MoneyInput value={amount} onChange={setAmount} autoFocus /></Field>
+        <Field label="Tutar" hint={autopay ? `Tahmini ${formatMoney(target.occurrence.expected)}` : undefined}>
+          <MoneyInput value={amount} onChange={setAmount} autoFocus />
+        </Field>
         {isStmt && (
           <div className="flex gap-2">
             <button type="button" className="chip" onClick={() => setAmount(moneyToInput(target.statement.minPayment))}>Asgari</button>

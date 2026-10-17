@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  accountBalance, addDays, debtSummary, monthSummary, todayISO, upcoming,
+  accountBalance, addDays, debtSummary, formatMoney, monthSummary, todayISO, upcoming,
   type Snapshot, type UpcomingItem,
 } from '../domain'
 import { Amount, Empty, PageHeader, Section } from '../components/ui'
@@ -119,10 +119,11 @@ function Upcoming({ snap }: { snap: Snapshot }) {
 const itemKey = (it: UpcomingItem) => (it.type === 'occurrence' ? it.occurrence.key : `${it.card.id}:${it.statement.periodEnd}`)
 
 function UpcomingRow({ it, today, busy, onPay }: { it: UpcomingItem; today: string; busy: boolean; onPay: () => void }) {
-  const overdue = it.dueDate < today
+  const autopay = it.type === 'occurrence' && it.occurrence.status === 'autopay_pending'
+  const overdue = it.dueDate < today && !autopay
   const isIncome = it.type === 'occurrence' && it.plan.kind === 'recurring_income'
   const name = it.type === 'occurrence' ? it.plan.name : `${it.card.name} ekstresi`
-  const link = it.type === 'occurrence' ? `/planlar/${it.plan.id}` : '/kartlar'
+  const link = it.type === 'statement' ? '/kartlar' : it.plan.kind === 'recurring_expense' ? `/faturalar/${it.plan.id}` : `/planlar/${it.plan.id}`
   return (
     <li className="flex items-center gap-3 py-2.5">
       <div className={`w-14 shrink-0 text-center text-xs font-medium ${overdue ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'}`}>
@@ -135,8 +136,10 @@ function UpcomingRow({ it, today, busy, onPay }: { it: UpcomingItem; today: stri
           {it.type === 'occurrence' ? <OccBadge status={it.occurrence.status} /> : <StmtBadge status={it.statement.status} />}
         </div>
       </Link>
-      <Amount value={it.amount} tone={isIncome ? 'income' : 'expense'} className="text-sm font-semibold" />
-      <button className="btn btn-pay btn-sm" disabled={busy} onClick={onPay}>{isIncome ? 'Alındı' : 'Ödendi'}</button>
+      {autopay
+        ? <span className="whitespace-nowrap text-sm tabular-nums text-slate-400">≈ {formatMoney(it.amount)}</span>
+        : <Amount value={it.amount} tone={isIncome ? 'income' : 'expense'} className="text-sm font-semibold" />}
+      <button className={`btn btn-sm ${autopay ? 'btn-soft' : 'btn-pay'}`} disabled={busy} onClick={onPay}>{autopay ? 'Tutar gir' : isIncome ? 'Alındı' : 'Ödendi'}</button>
     </li>
   )
 }

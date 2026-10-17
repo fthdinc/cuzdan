@@ -9,5 +9,5 @@ export { parseTable, guessMapping, parseCsv, cellDateISO, type Cell, type Column
 export { suggestCategory } from './category'
 export {
   prepareImport, buildImport, reconcile, withImport,
-  type ImportRow, type ImportKind, type PreparedImport, type Reconciliation, type BuiltImport, type PlanDraft, type PrepareOptions,
+  type ImportRow, type ImportKind, type PreparedImport, type Reconciliation, type BuiltImport, type PlanDraft, type BillPlanDraft, type PrepareOptions,
 } from './prepare'

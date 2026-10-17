@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import {
   addDays, formatMoney, loanProgress, occurrencesForPlan, todayISO,
   type Plan, type PlanKind, type Snapshot,
@@ -14,7 +14,6 @@ import { FREQ_LABEL, installmentProgress } from '../lib/plans'
 const TABS: { value: PlanKind; label: string; add: string }[] = [
   { value: 'loan', label: 'Krediler', add: 'Kredi ekle' },
   { value: 'card_installment', label: 'Taksitler', add: 'Taksit ekle' },
-  { value: 'recurring_expense', label: 'Faturalar', add: 'Fatura ekle' },
   { value: 'recurring_income', label: 'Gelirler', add: 'Gelir ekle' },
 ]
 
@@ -22,6 +21,7 @@ export function PlansPage({ snap }: { snap: Snapshot }) {
   const [params, setParams] = useSearchParams()
   const tab = (TABS.find((t) => t.value === params.get('tab'))?.value ?? 'loan') as PlanKind
   const [adding, setAdding] = useState(false)
+  if (params.get('tab') === 'recurring_expense') return <Navigate to="/faturalar" replace />
   const plans = snap.plans.filter((p) => p.kind === tab).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'tr'))
   const meta = TABS.find((t) => t.value === tab)!
   const noCard = tab === 'card_installment' && !snap.accounts.some((a) => a.kind === 'credit_card' && !a.archived)
