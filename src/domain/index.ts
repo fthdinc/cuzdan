@@ -13,7 +13,7 @@ export { addMonths, addDays, todayISO } from './dates'
 export { loanFromRemaining, annuityInstallment, occurrencesForPlan, loanProgress } from './plans'
 
 // --- cards ---
-export { cardStatements, accountBalance, cardFutureInstallments, minPaymentRate } from './cards'
+export { cardStatements, accountBalance, cardFutureInstallments, minPaymentRate, installmentSchedule } from './cards'
 
 // --- summaries ---
 export { monthSummary, upcoming, debtSummary } from './summaries'

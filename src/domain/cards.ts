@@ -1,5 +1,5 @@
 import { addDays, dateInMonth, monthIndex } from './dates'
-import type { Account, CardStatement, ID, ISODate, InstallmentPart, Kurus, Snapshot, StatementStatus } from './types'
+import type { Account, CardInstallmentPlan, CardStatement, ID, ISODate, InstallmentPart, Kurus, Snapshot, StatementStatus } from './types'
 
 export function minPaymentRate(card: Account): number {
   const s = card.card
@@ -24,24 +24,30 @@ export interface BilledPart extends InstallmentPart {
  */
 export function billedParts(card: Account, snap: Snapshot): BilledPart[] {
   if (!card.card) return []
-  const day = card.card.statementDay
-  const firstMi = firstKesimIndex(day, card.openingDate)
+  const firstMi = firstKesimIndex(card.card.statementDay, card.openingDate)
   const out: BilledPart[] = []
   for (const plan of snap.plans) {
     if (plan.kind !== 'card_installment' || plan.accountId !== card.id) continue
-    const startMi = firstKesimIndex(day, plan.purchaseDate)
-    const base = Math.floor(plan.totalAmount / plan.installmentCount)
-    const remainder = plan.totalAmount - base * plan.installmentCount
-    for (let i = plan.preSettledCount; i < plan.installmentCount; i++) {
-      const mi = startMi + i
-      if (mi < firstMi) continue
-      out.push({
-        planId: plan.id, index: i, amount: i === 0 ? base + remainder : base,
-        kesim: dateInMonth(mi, day), categoryId: plan.categoryId,
-      })
+    for (const p of installmentSchedule(plan, card)) {
+      if (p.index < plan.preSettledCount || monthIndex(p.kesim) < firstMi) continue
+      out.push({ ...p, categoryId: plan.categoryId })
     }
   }
   return out
+}
+
+/**
+ * Full per-part schedule of one card installment plan, including pre-settled parts.
+ * Part i is billed at the i-th kesim on/after purchaseDate; part 0 carries the rounding remainder.
+ */
+export function installmentSchedule(plan: CardInstallmentPlan, card: Account): (InstallmentPart & { kesim: ISODate })[] {
+  const day = card.card?.statementDay ?? 1
+  const startMi = firstKesimIndex(day, plan.purchaseDate)
+  const base = Math.floor(plan.totalAmount / plan.installmentCount)
+  const remainder = plan.totalAmount - base * plan.installmentCount
+  return Array.from({ length: plan.installmentCount }, (_, i) => ({
+    planId: plan.id, index: i, amount: i === 0 ? base + remainder : base, kesim: dateInMonth(startMi + i, day),
+  }))
 }
 
 /**

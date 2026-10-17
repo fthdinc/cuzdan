@@ -1,4 +1,4 @@
-import { addMonths, type Account, type CardInstallmentPlan, type ISODate, type Kurus, type Plan, type Snapshot } from '../domain'
+import { addMonths, installmentSchedule, type Account, type CardInstallmentPlan, type ISODate, type Kurus, type Plan, type Snapshot } from '../domain'
 
 export const PLAN_KIND_LABEL: Record<Plan['kind'], string> = {
   loan: 'Kredi',
@@ -9,13 +9,6 @@ export const PLAN_KIND_LABEL: Record<Plan['kind'], string> = {
 
 export const FREQ_LABEL = { weekly: 'Haftalık', monthly: 'Aylık', yearly: 'Yıllık' } as const
 
-/** Kesim date in the month of `d` (day clamped to month end). */
-function kesimInMonth(d: ISODate, day: number): ISODate {
-  const [y, m] = d.split('-').map(Number)
-  const dim = new Date(Date.UTC(y, m, 0)).getUTCDate()
-  return `${d.slice(0, 7)}-${String(Math.min(day, dim)).padStart(2, '0')}`
-}
-
 export interface InstallmentRow {
   index: number
   kesim: ISODate
@@ -23,27 +16,17 @@ export interface InstallmentRow {
   state: 'presettled' | 'billed' | 'future'
 }
 
-/**
- * Per-part schedule of a card installment plan. Mirrors the engine's billing rule
- * (part i billed at the (i)th kesim on/after purchaseDate; part 0 carries the rounding remainder),
- * because the engine does not export a per-plan view.
- */
-export function installmentSchedule(plan: CardInstallmentPlan, card: Account | undefined, today: ISODate): InstallmentRow[] {
-  const day = card?.card?.statementDay ?? 1
-  let k0 = kesimInMonth(plan.purchaseDate, day)
-  if (k0 < plan.purchaseDate) k0 = kesimInMonth(addMonths(`${plan.purchaseDate.slice(0, 7)}-01`, 1), day)
-  const base = Math.floor(plan.totalAmount / plan.installmentCount)
-  const remainder = plan.totalAmount - base * plan.installmentCount
-  return Array.from({ length: plan.installmentCount }, (_, i) => {
-    const kesim = kesimInMonth(addMonths(`${k0.slice(0, 7)}-01`, i), day)
-    const state: InstallmentRow['state'] = i < plan.preSettledCount ? 'presettled' : kesim <= today ? 'billed' : 'future'
-    return { index: i, kesim, amount: i === 0 ? base + remainder : base, state }
-  })
+export function installmentRows(plan: CardInstallmentPlan, card: Account | undefined, today: ISODate): InstallmentRow[] {
+  if (!card) return []
+  return installmentSchedule(plan, card).map((p) => ({
+    index: p.index, kesim: p.kesim, amount: p.amount,
+    state: p.index < plan.preSettledCount ? 'presettled' : p.kesim <= today ? 'billed' : 'future',
+  }))
 }
 
 export function installmentProgress(plan: CardInstallmentPlan, snap: Snapshot, today: ISODate) {
   const card = snap.accounts.find((a) => a.id === plan.accountId)
-  const rows = installmentSchedule(plan, card, today)
+  const rows = installmentRows(plan, card, today)
   const future = rows.filter((r) => r.state === 'future')
   return {
     rows,
