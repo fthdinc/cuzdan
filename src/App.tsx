@@ -11,6 +11,7 @@ import { PlansPage } from './pages/Plans'
 import { PlanDetailPage } from './pages/PlanDetail'
 import { CardsPage } from './pages/Cards'
 import { SettingsPage } from './pages/Settings'
+import { ImportPage } from './pages/Import'
 
 /** Loads the snapshot and shows the first-run guide until an account exists (Ayarlar stays reachable). */
 function WithSnapshot({ children }: { children: (snap: Snapshot) => ReactNode }) {
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="planlar/:id" element={page((s) => <PlanDetailPage snap={s} />)} />
           <Route path="kartlar" element={page((s) => <CardsPage snap={s} />)} />
           <Route path="ayarlar" element={page((s) => <SettingsPage snap={s} />)} />
+          <Route path="ice-aktar" element={page((s) => <ImportPage snap={s} />)} />
         </Route>
       </Routes>
     </HashRouter>

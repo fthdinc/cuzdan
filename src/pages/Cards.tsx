@@ -43,6 +43,7 @@ function CardOverview({ card, snap }: { card: Account; snap: Snapshot }) {
           <div className="text-xs text-slate-500">
             Kesim her ayın {card.card?.statementDay}. günü · son ödeme {card.card?.dueDaysAfterStatement} gün sonra · asgari %{Math.round(minPaymentRate(card) * 100)}
           </div>
+          <Link to={`/ice-aktar?hesap=${card.id}`} className="btn btn-soft btn-sm mt-2">Ekstre içe aktar</Link>
         </div>
         <div className="text-right">
           <div className="text-xs text-slate-500">Güncel borç</div>

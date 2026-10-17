@@ -10,6 +10,8 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Include the lazily loaded pdf.js worker (.mjs) so PDF import works offline.
+      workbox: { globPatterns: ['**/*.{js,mjs,css,html,svg,png,ico,webmanifest}'] },
       manifest: {
         name: 'Cüzdan',
         short_name: 'Cüzdan',

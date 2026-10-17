@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { formatMoney, todayISO, type Snapshot, type Transaction, type TxKind } from '../domain'
 import { Amount, CategoryDot, Empty, PageHeader } from '../components/ui'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -10,7 +11,12 @@ export function TransactionsPage({ snap }: { snap: Snapshot }) {
   const [editing, setEditing] = useState<Transaction | 'new' | null>(null)
   return (
     <div className="space-y-4">
-      <PageHeader title="İşlemler" action={<button className="btn btn-primary" onClick={() => setEditing('new')}>+ İşlem</button>} />
+      <PageHeader title="İşlemler" action={
+        <div className="flex gap-2">
+          <Link to="/ice-aktar" className="btn btn-soft">Ekstre içe aktar</Link>
+          <button className="btn btn-primary" onClick={() => setEditing('new')}>+ İşlem</button>
+        </div>
+      } />
       <ErrorBoundary>
         <QuickAdd snap={snap} />
       </ErrorBoundary>

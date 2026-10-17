@@ -1,5 +1,6 @@
 import { addDays, daysInMonth, toISO, ymd } from './dates'
 import { parseMoney } from './money'
+import { findCategory } from './categoryMatch'
 import type { Category, ISODate, QuickEntry } from './types'
 
 const lower = (s: string) => s.toLocaleLowerCase('tr-TR')
@@ -41,8 +42,6 @@ export function parseQuickEntry(text: string, categories: Category[], today: ISO
   }
   if (!amount) return null
 
-  const words = new Set(noteWords.map(lower))
-  const category = categories.find((c) => c.kind === kind
-    && [c.name, ...(c.keywords ?? [])].some((k) => words.has(lower(k))))
+  const category = findCategory(categories, kind, new Set(noteWords.map(lower)), lower)
   return { kind, amount, date, categoryId: category?.id, note: noteWords.join(' ') }
 }

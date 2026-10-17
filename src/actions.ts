@@ -1,6 +1,7 @@
 // All DB writes the UI performs.
 import { db, newId } from './db'
 import type { Account, ID, ISODate, Kurus, Occurrence, Plan, Transaction } from './domain'
+import type { BuiltImport } from './domain/import'
 
 export type TxDraft = Omit<Transaction, 'id' | 'createdAt'>
 
@@ -79,6 +80,27 @@ export async function removeAccount(id: ID): Promise<'deleted' | 'archived'> {
   }
   await db.accounts.delete(id)
   return 'deleted'
+}
+
+// --- statement import ---
+
+/** Writes an import (transactions + installment plans, all tagged with the same importId) atomically. */
+export async function commitImport(built: BuiltImport): Promise<void> {
+  await db.transaction('rw', db.transactions, db.plans, async () => {
+    await db.transactions.bulkAdd(built.transactions.map(clean))
+    await db.plans.bulkAdd(built.plans.map(clean))
+  })
+}
+
+/** Deletes exactly the records created by one import. Returns how many were removed. */
+export async function undoImport(importId: string): Promise<number> {
+  return db.transaction('rw', db.transactions, db.plans, async () => {
+    const txIds = (await db.transactions.filter((t) => t.importId === importId).primaryKeys()) as ID[]
+    const planIds = (await db.plans.filter((p) => p.importId === importId).primaryKeys()) as ID[]
+    await db.transactions.bulkDelete(txIds)
+    await db.plans.bulkDelete(planIds)
+    return txIds.length + planIds.length
+  })
 }
 
 // --- smart defaults ---

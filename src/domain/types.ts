@@ -36,6 +36,7 @@ export interface Transaction {
   categoryId?: ID
   note?: string
   occurrenceKey?: string // set when this tx settles a plan occurrence: `${planId}:${index}`
+  importId?: string // set on tx created by a statement import (undo deletes exactly these)
   createdAt: number
 }
 
@@ -64,6 +65,7 @@ interface PlanBase {
   note?: string
   createdAt: number
   overrides?: Record<number, OccurrenceOverride>
+  importId?: string // set on plans created by a statement import
 }
 
 export interface LoanPlan extends PlanBase {

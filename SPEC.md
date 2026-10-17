@@ -38,5 +38,21 @@
 - **Kartlar**: Kart başına ekstre listesi, dönem borcu, asgari, son ödeme, ödeme durumu, kalan taksitler.
 - **Ayarlar**: Kategoriler, hesaplar, JSON yedek al/yükle.
 
+## Faturalar (v1.1)
+Fatura bir hesap değildir; bir hesaptan (kart/banka) ödenen düzenli yükümlülüktür. Bu yüzden "Yeni hesap" içinde değil,
+kendi ana sekmesinde ("Faturalar") yönetilir. Veri modeli olarak `recurring_expense` planının genişletilmiş halidir.
+
+- **Alanlar**: tür (elektrik, su, doğalgaz, telefon, internet, TV/dijital, aidat, abonelik, diğer), kurum (Enerjisa, İGDAŞ, Turkcell...),
+  abone/tesisat no (opsiyonel), ödeme hesabı, **otomatik ödeme talimatı** (var/yok), tipik son ödeme günü, ekstre eşleştirme anahtar kelimeleri.
+- **Değişken tutar**: Tahmini tutar son 3 ayın ortalamasından otomatik hesaplanır. Planlanan giderlerde bu tahmin kullanılır.
+- **Otomatik ödemeli faturalar**: Vadesi geçince "Gecikti" değil "Otomatik ödendi, tutar bekleniyor" olarak görünür (kırmızı değil, mavi/gri).
+  Tutar iki yolla kesinleşir: (1) ekstre içe aktarılınca ilgili satır faturaya bağlanır, (2) tek dokunuşla tutar girilir (SMS'teki tutar).
+  Tutar bilinmeden işlem otomatik yaratılmaz (yanlış bakiye riskini önlemek için).
+- **Ekstreden ayrıştırma**: İçe aktarmada bilinen kurum anahtar kelimeleri (ENERJISA, IGDAS, ISKI, TURKCELL, VODAFONE, TURK TELEKOM,
+  SUPERONLINE, DIGITURK, NETFLIX, SPOTIFY...) taranır. Mevcut faturayla eşleşen satır o ayın vadesine bağlanır ve vade "ödendi" olur.
+  Eşleşmeyen fatura satırı için "Fatura olarak takip et" önerisi çıkar (tek tıkla fatura oluşturur).
+- **Faturalar ekranı**: Bu ayın toplam fatura tutarı, ödenen/bekleyen sayısı; türe göre ikonlu liste; her faturada bu ayın durumu,
+  tutarı ve geçen aya göre değişim (artış kırmızı, düşüş yeşil). Detayda son 12 ay tutar grafiği ve geçen yılın aynı ayı ile karşılaştırma.
+
 ## Kapsam dışı (sonraki sürümler)
-- Bulut senkron, çoklu kullanıcı, CSV/ekstre içe aktarma, faiz hesabı, bütçe hedefleri, grafik raporlar, bildirimler.
+- Bulut senkron, çoklu kullanıcı, faiz hesabı, bütçe hedefleri, bildirimler.
