@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loanProgress, occurrencesForPlan } from './index'
+import { loanFromRemaining, loanProgress, occurrencesForPlan } from './index'
 import type { LoanPlan, RecurringPlan, Snapshot, Transaction } from './index'
 
 const empty: Snapshot = { accounts: [], transactions: [], plans: [], categories: [] }
@@ -85,5 +85,31 @@ describe('loanProgress', () => {
     const pr = loanProgress({ ...loan, preSettledCount: 12 }, empty, '2026-10-17')
     expect(pr).toMatchObject({ paidCount: 12, remainingCount: 0, remainingAmount: 0 })
     expect(pr.nextDue).toBeUndefined()
+  })
+})
+
+describe('bug fixes', () => {
+  it('loan due dates keep dueDay after month-end clamping', () => {
+    const p = loanFromRemaining({
+      id: 'l', name: 'Kredi', accountId: 'b', createdAt: 1,
+      installmentAmount: 100000, totalInstallments: 12, remainingInstallments: 11, nextDueDate: '2026-03-31',
+    })
+    expect(p.firstDueDate).toBe('2026-02-28')
+    expect(p.dueDay).toBe(31)
+    const occ = occurrencesForPlan(p, empty, '2026-03-01', '2027-12-31')
+    expect(occ.map((o) => o.dueDate).slice(0, 5)).toEqual(['2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31', '2026-06-30'])
+    expect(occ).toHaveLength(12)
+    expect(occ[11].dueDate).toBe('2027-01-31')
+    expect(loanProgress(p, empty, '2026-03-01')).toMatchObject({ paidCount: 1, remainingCount: 11 })
+  })
+  it('loan without dueDay uses firstDueDate day', () => {
+    const occ = occurrencesForPlan({ ...loan, firstDueDate: '2026-01-31', preSettledCount: 0 }, empty, '2026-01-01', '2026-03-31')
+    expect(occ.map((o) => o.dueDate)).toEqual(['2026-01-31', '2026-02-28', '2026-03-31'])
+  })
+  it('recurring settledBefore -> presettled unless paid by tx', () => {
+    const plan = recurring({ startDate: '2026-07-01', settledBefore: '2026-09-01', overrides: { 0: { skipped: true } } })
+    const snap: Snapshot = { ...empty, transactions: [tx({ id: 'x', amount: 50000, occurrenceKey: 'r:1' })] }
+    const occ = occurrencesForPlan(plan, snap, '2026-10-17', '2026-10-31')
+    expect(occ.map((o) => o.status)).toEqual(['presettled', 'paid', 'overdue', 'overdue'])
   })
 })

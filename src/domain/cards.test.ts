@@ -146,8 +146,8 @@ describe('summaries', () => {
     expect(m.expense).toBe(12000 + 5000 + 33333)
     expect(m.net).toBe(4500000 - 50333)
     expect(m.projectedIncome).toBe(4500000) // Oct 25 salary pending
-    // Oct 1 bill paid; statement due Oct 15 remainder 166668-10000
-    expect(m.projectedExpense).toBe(156668)
+    // Oct 1 bill paid; card statements are not projected (already in expense)
+    expect(m.projectedExpense).toBe(0)
     expect(m.byCategory).toEqual([
       { categoryId: 'elec', amount: 33333 },
       { categoryId: 'market', amount: 12000 },
@@ -176,5 +176,61 @@ describe('summaries', () => {
       loansRemaining: 800000, cardsCurrent: 161668, cardsFutureInstallments: 33333,
       total: 800000 + 161668 + 33333,
     })
+  })
+})
+
+describe('bug fixes', () => {
+  const c10: Account = {
+    id: 'k', name: 'Kart2', kind: 'credit_card', openingBalance: -100000, openingDate: '2026-09-15',
+    card: { limit: 3000000, statementDay: 10, dueDaysAfterStatement: 10 },
+  }
+  const base: Snapshot = { accounts: [bank, c10], categories: [], plans: [], transactions: [] }
+
+  it('late payment after dueDate is attributed to the statement', () => {
+    const snap = { ...base, transactions: [tx({ kind: 'transfer', accountId: 'b', toAccountId: 'k', date: '2026-10-22', amount: 100000 })] }
+    const today = '2026-10-25'
+    const st = cardStatements(c10, snap, today)
+    expect(st[0]).toMatchObject({ periodEnd: '2026-10-10', dueDate: '2026-10-20', total: 100000, paid: 100000, status: 'paid' })
+    expect(upcoming(snap, today, '2026-12-31').filter((i) => i.type === 'statement')).toEqual([])
+    expect(monthSummary(snap, '2026-10', today).projectedExpense).toBe(0)
+  })
+  it('a payment is attributed to one statement only (large dueDays)', () => {
+    const c = { ...c10, card: { ...c10.card!, dueDaysAfterStatement: 40 } }
+    const snap = {
+      ...base, accounts: [bank, c],
+      transactions: [
+        tx({ accountId: 'k', date: '2026-10-20', amount: 30000 }),
+        tx({ kind: 'transfer', accountId: 'b', toAccountId: 'k', date: '2026-11-15', amount: 20000 }),
+      ],
+    }
+    const st = cardStatements(c, snap, '2026-12-01')
+    expect(st.map((s) => s.paid)).toEqual([0, 20000, 0])
+  })
+  it('tx before openingDate are ignored per side', () => {
+    const snap = {
+      ...base,
+      transactions: [
+        tx({ accountId: 'k', date: '2026-09-01', amount: 7000 }), // before card opening
+        tx({ kind: 'transfer', accountId: 'b', toAccountId: 'k', date: '2026-09-10', amount: 5000 }), // bank side counts, card side not
+        tx({ kind: 'transfer', accountId: 'b', toAccountId: 'k', date: '2026-07-10', amount: 3000 }), // neither side
+        tx({ accountId: 'k', date: '2026-09-15', amount: 1000 }), // on openingDate counts
+      ],
+    }
+    expect(accountBalance(c10, snap, '2026-10-17')).toBe(-101000)
+    expect(accountBalance(bank, snap, '2026-10-17')).toBe(1000000 - 5000)
+    expect(cardStatements(c10, snap, '2026-10-17')[0]).toMatchObject({ spending: 1000, total: 101000, paid: 0 })
+  })
+})
+
+describe('presettled recurring in summaries', () => {
+  it('presettled occurrences are treated as done', () => {
+    const bill: Plan = {
+      id: 'e', name: 'Kira', accountId: 'b', active: true, createdAt: 0, kind: 'recurring_expense',
+      amount: 50000, variable: false, frequency: 'monthly', startDate: '2026-08-01', settledBefore: '2026-10-02',
+    }
+    const snap: Snapshot = { accounts: [bank], categories: [], plans: [bill], transactions: [] }
+    expect(upcoming(snap, TODAY, '2026-11-30').map((i) => i.dueDate)).toEqual(['2026-11-01'])
+    expect(monthSummary(snap, '2026-10', TODAY).projectedExpense).toBe(0)
+    expect(monthSummary(snap, '2026-11', TODAY).projectedExpense).toBe(50000)
   })
 })

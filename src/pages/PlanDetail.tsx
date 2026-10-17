@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  formatMoney, loanProgress, occurrencesForPlan, todayISO,
+  formatMoney, installmentSchedule, loanProgress, occurrencesForPlan, todayISO,
   type CardInstallmentPlan, type Occurrence, type Plan, type Snapshot,
 } from '../domain'
 import { deletePlan, deleteTx, setSkipped } from '../actions'
@@ -21,6 +21,13 @@ export function PlanDetailPage({ snap }: { snap: Snapshot }) {
 
   const tab = plan.kind
   const remove = async () => {
+    if (plan.kind === 'card_installment') {
+      const card = snap.accounts.find((a) => a.id === plan.accountId)
+      const today = todayISO()
+      if (card && installmentSchedule(plan, card).some((p) => p.index >= plan.preSettledCount && p.kesim <= today)) {
+        return alert('Bu alışverişin taksitleri kart ekstresine yansıdığı için silinemez; silinirse faturalanmış kart borcu da kaybolur.')
+      }
+    }
     if (!confirm(`"${plan.name}" silinsin mi? Bu plana bağlı ödeme işlemleri silinmez.`)) return
     await deletePlan(plan.id)
     navigate(`/planlar?tab=${tab}`)
@@ -113,7 +120,7 @@ function Overview({ plan, snap }: { plan: Plan; snap: Snapshot }) {
 
 function OccurrenceList({ plan, snap }: { plan: Plan; snap: Snapshot }) {
   const today = todayISO()
-  const { pay, sheet } = usePay(snap)
+  const { pay, sheet, busy } = usePay(snap)
   let occs = occurrencesForPlan(plan, snap, today, occurrenceHorizon(plan, today))
   const recurring = plan.kind !== 'loan'
   if (recurring) occs = occs.slice(-24).reverse() // newest first, recent history only
@@ -121,7 +128,7 @@ function OccurrenceList({ plan, snap }: { plan: Plan; snap: Snapshot }) {
   const income = plan.kind === 'recurring_income'
 
   const undo = async (o: Occurrence) => {
-    if (o.status === 'skipped') return setSkipped(plan, o.index, false)
+    if (o.status === 'skipped') return setSkipped(plan.id, o.index, false)
     if (o.transactionId && confirm('Ödeme kaydı silinsin mi? Vade tekrar bekliyor olur.')) await deleteTx(o.transactionId)
   }
 
@@ -148,8 +155,8 @@ function OccurrenceList({ plan, snap }: { plan: Plan; snap: Snapshot }) {
             <div className="flex shrink-0 gap-1">
               {(o.status === 'pending' || o.status === 'overdue') && (
                 <>
-                  <button className="btn btn-pay btn-sm" onClick={() => pay({ type: 'occurrence', plan, occurrence: o })}>{income ? 'Alındı' : 'Öde'}</button>
-                  <button className="btn btn-soft btn-sm" onClick={() => setSkipped(plan, o.index, true)}>Atla</button>
+                  <button className="btn btn-pay btn-sm" disabled={busy === o.key} onClick={() => pay({ type: 'occurrence', plan, occurrence: o })}>{income ? 'Alındı' : 'Öde'}</button>
+                  <button className="btn btn-soft btn-sm" onClick={() => setSkipped(plan.id, o.index, true)}>Atla</button>
                 </>
               )}
               {(o.status === 'paid' || o.status === 'skipped') && (

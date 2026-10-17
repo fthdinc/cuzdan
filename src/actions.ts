@@ -19,16 +19,20 @@ export async function deleteTx(id: ID): Promise<void> {
   await db.transactions.delete(id)
 }
 
-/** Settle a loan / recurring plan occurrence. */
-export async function payOccurrence(plan: Plan, occ: Occurrence, amount: Kurus, accountId: ID, date: ISODate) {
-  await addTx({
-    date,
-    kind: plan.kind === 'recurring_income' ? 'income' : 'expense',
-    amount,
-    accountId,
-    categoryId: plan.categoryId,
-    note: plan.name,
-    occurrenceKey: occ.key,
+/** Settle a loan / recurring plan occurrence. No-op (returns false) if it is already settled. */
+export async function payOccurrence(plan: Plan, occ: Occurrence, amount: Kurus, accountId: ID, date: ISODate): Promise<boolean> {
+  return db.transaction('rw', db.transactions, async () => {
+    if (await db.transactions.where('occurrenceKey').equals(occ.key).count()) return false
+    await addTx({
+      date,
+      kind: plan.kind === 'recurring_income' ? 'income' : 'expense',
+      amount,
+      accountId,
+      categoryId: plan.categoryId,
+      note: plan.name,
+      occurrenceKey: occ.key,
+    })
+    return true
   })
 }
 
@@ -37,14 +41,18 @@ export async function payCard(card: Account, fromAccountId: ID, amount: Kurus, d
   await addTx({ date, kind: 'transfer', amount, accountId: fromAccountId, toAccountId: card.id, note: `${card.name} ödemesi` })
 }
 
-export async function setSkipped(plan: Plan, index: number, skipped: boolean) {
-  const overrides = { ...(plan.overrides ?? {}) }
-  const cur = { ...(overrides[index] ?? {}) }
-  if (skipped) cur.skipped = true
-  else delete cur.skipped
-  if (Object.keys(cur).length) overrides[index] = cur
-  else delete overrides[index]
-  await db.plans.update(plan.id, { overrides })
+export async function setSkipped(planId: ID, index: number, skipped: boolean) {
+  await db.transaction('rw', db.plans, async () => {
+    const plan = await db.plans.get(planId)
+    if (!plan) return
+    const overrides = { ...(plan.overrides ?? {}) }
+    const cur = { ...(overrides[index] ?? {}) }
+    if (skipped) cur.skipped = true
+    else delete cur.skipped
+    if (Object.keys(cur).length) overrides[index] = cur
+    else delete overrides[index]
+    await db.plans.update(planId, { overrides })
+  })
 }
 
 export async function savePlan(plan: Plan) {

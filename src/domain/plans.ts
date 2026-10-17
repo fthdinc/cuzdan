@@ -1,4 +1,4 @@
-import { addDays, addMonths } from './dates'
+import { addDays, addMonths, dateInMonth, monthIndex, ymd } from './dates'
 import type { ISODate, Kurus, LoanPlan, Occurrence, OccurrenceStatus, Plan, Snapshot } from './types'
 
 export function loanFromRemaining(input: {
@@ -18,6 +18,7 @@ export function loanFromRemaining(input: {
     totalInstallments: input.totalInstallments,
     preSettledCount,
     firstDueDate: addMonths(input.nextDueDate, -preSettledCount),
+    dueDay: ymd(input.nextDueDate)[2],
   }
 }
 
@@ -26,11 +27,16 @@ export function annuityInstallment(principal: Kurus, monthlyRate: number, n: num
   return Math.round((principal * monthlyRate) / (1 - (1 + monthlyRate) ** -n))
 }
 
+/** Due date of loan installment i: month of firstDueDate + i, on dueDay (clamped to month end). */
+function loanDueDate(plan: LoanPlan, i: number): ISODate {
+  return dateInMonth(monthIndex(plan.firstDueDate) + i, plan.dueDay ?? ymd(plan.firstDueDate)[2])
+}
+
 /** Due date of occurrence index i, or null when the plan has no such occurrence. */
 function dueDateOf(plan: Plan, i: number): ISODate | null {
   switch (plan.kind) {
     case 'loan':
-      return i < plan.totalInstallments ? addMonths(plan.firstDueDate, i) : null
+      return i < plan.totalInstallments ? loanDueDate(plan, i) : null
     case 'card_installment':
       return null
     default: {
@@ -47,6 +53,7 @@ function generate(plan: Plan, snap: Snapshot, today: ISODate, until: ISODate): O
   const out: Occurrence[] = []
   const baseAmount = plan.kind === 'loan' ? plan.installmentAmount : plan.kind === 'card_installment' ? 0 : plan.amount
   const preSettled = plan.kind === 'loan' ? plan.preSettledCount : 0
+  const settledBefore = plan.kind === 'recurring_expense' || plan.kind === 'recurring_income' ? plan.settledBefore : undefined
   for (let i = 0; ; i++) {
     const dueDate = dueDateOf(plan, i)
     if (dueDate === null || dueDate > until) break
@@ -56,6 +63,7 @@ function generate(plan: Plan, snap: Snapshot, today: ISODate, until: ISODate): O
     let status: OccurrenceStatus
     if (i < preSettled) status = 'presettled'
     else if (tx) status = 'paid'
+    else if (settledBefore && dueDate < settledBefore) status = 'presettled'
     else if (override?.skipped) status = 'skipped'
     else if (dueDate < today) status = 'overdue'
     else status = 'pending'
@@ -83,7 +91,7 @@ export function occurrencesForPlan(plan: Plan, snap: Snapshot, today: ISODate, u
 
 /** Last due date of a loan. */
 export function loanEnd(plan: LoanPlan): ISODate {
-  return addMonths(plan.firstDueDate, plan.totalInstallments - 1)
+  return loanDueDate(plan, plan.totalInstallments - 1)
 }
 
 /**

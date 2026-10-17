@@ -72,6 +72,7 @@ export interface LoanPlan extends PlanBase {
   totalInstallments: number
   firstDueDate: ISODate // due date of installment index 0; index i = firstDueDate + i months
   preSettledCount: number // installments paid before tracking started (no tx)
+  dueDay?: number // day of month installments are due (1-31, clamped); defaults to firstDueDate's day
   principal?: Kurus
   monthlyRate?: number // e.g. 0.0299
 }
@@ -91,6 +92,7 @@ export interface RecurringPlan extends PlanBase {
   frequency: Frequency
   startDate: ISODate // first occurrence
   endDate?: ISODate
+  settledBefore?: ISODate // occurrences due before this date are 'presettled' (history before tracking)
 }
 
 export type Plan = LoanPlan | CardInstallmentPlan | RecurringPlan
@@ -126,7 +128,7 @@ export interface CardStatement {
   installmentParts: InstallmentPart[]
   total: Kurus // card debt at periodEnd (>= 0)
   minPayment: Kurus
-  paid: Kurus // payments into card in (periodEnd, dueDate]
+  paid: Kurus // payments into card in (periodEnd, next statement's periodEnd]
   status: StatementStatus // 'open' while today <= periodEnd
 }
 
@@ -143,7 +145,7 @@ export interface MonthSummary {
   expense: Kurus // expense tx + card installment parts billed in this month's statements
   net: Kurus
   projectedIncome: Kurus // pending recurring_income occurrences in month
-  projectedExpense: Kurus // pending loan/recurring_expense occurrences + unpaid card statements due in month
+  projectedExpense: Kurus // pending/overdue loan + recurring_expense occurrences due in month (card spending is already in expense)
   byCategory: { categoryId: ID | null; amount: Kurus }[] // expenses only
 }
 

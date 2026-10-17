@@ -51,14 +51,15 @@ export function installmentSchedule(plan: CardInstallmentPlan, card: Account): (
 }
 
 /**
- * Signed balance as of date (inclusive): openingBalance + income - expense - outgoing transfers
+ * Signed balance as of date (inclusive). openingBalance is the balance AT openingDate, so tx dated before
+ * openingDate are ignored (per side for transfers: each account uses its own openingDate). openingBalance + income - expense - outgoing transfers
  * + incoming transfers + adjustments (signed). Cards additionally subtract installment parts billed
  * in statements with kesim <= asOf. Card: negative = debt.
  */
 export function accountBalance(account: Account, snap: Snapshot, asOf: ISODate): Kurus {
   let bal = account.openingBalance
   for (const t of snap.transactions) {
-    if (t.date > asOf) continue
+    if (t.date > asOf || t.date < account.openingDate) continue
     if (t.accountId === account.id) {
       if (t.kind === 'income' || t.kind === 'adjustment') bal += t.amount
       else bal -= t.amount // expense, outgoing transfer
@@ -79,6 +80,8 @@ export function cardFutureInstallments(card: Account, snap: Snapshot, today: ISO
 /**
  * Statements from the card's openingDate through the currently open period (inclusive). Newest last.
  * The open statement's total is the debt at its kesim from data known so far. Non-card accounts -> [].
+ * paid = transfers into the card in (periodEnd, next kesim], so late payments still count and each payment
+ * is attributed to exactly one statement. Spending starts at openingDate (consistent with accountBalance).
  */
 export function cardStatements(card: Account, snap: Snapshot, today: ISODate): CardStatement[] {
   const settings = card.card
@@ -90,11 +93,12 @@ export function cardStatements(card: Account, snap: Snapshot, today: ISODate): C
   for (let mi = firstKesimIndex(settings.statementDay, card.openingDate); ; mi++) {
     const periodEnd = dateInMonth(mi, settings.statementDay)
     const dueDate = addDays(periodEnd, settings.dueDaysAfterStatement)
+    const nextPeriodEnd = dateInMonth(mi + 1, settings.statementDay)
     let spending = 0
     let paid = 0
     for (const t of snap.transactions) {
       if (t.kind === 'expense' && t.accountId === card.id && t.date >= periodStart && t.date <= periodEnd) spending += t.amount
-      if (t.kind === 'transfer' && t.toAccountId === card.id && t.date > periodEnd && t.date <= dueDate) paid += t.amount
+      if (t.kind === 'transfer' && t.toAccountId === card.id && t.date > periodEnd && t.date <= nextPeriodEnd) paid += t.amount
     }
     const total = Math.max(0, -accountBalance(card, snap, periodEnd))
     const minPayment = Math.round(total * rate)

@@ -100,12 +100,12 @@ function Debt({ snap }: { snap: Snapshot }) {
 function Upcoming({ snap }: { snap: Snapshot }) {
   const today = todayISO()
   const items = upcoming(snap, today, addDays(today, 30))
-  const { pay, sheet } = usePay(snap)
+  const { pay, sheet, busy } = usePay(snap)
   if (!items.length) return <Empty>Önümüzdeki 30 günde ödeme yok</Empty>
   return (
     <>
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-        {items.map((it) => <UpcomingRow key={itemKey(it)} it={it} today={today} onPay={() => pay(
+        {items.map((it) => <UpcomingRow key={itemKey(it)} it={it} today={today} busy={busy === itemKey(it)} onPay={() => pay(
           it.type === 'occurrence'
             ? { type: 'occurrence', plan: it.plan, occurrence: it.occurrence }
             : { type: 'statement', card: it.card, statement: it.statement },
@@ -118,7 +118,7 @@ function Upcoming({ snap }: { snap: Snapshot }) {
 
 const itemKey = (it: UpcomingItem) => (it.type === 'occurrence' ? it.occurrence.key : `${it.card.id}:${it.statement.periodEnd}`)
 
-function UpcomingRow({ it, today, onPay }: { it: UpcomingItem; today: string; onPay: () => void }) {
+function UpcomingRow({ it, today, busy, onPay }: { it: UpcomingItem; today: string; busy: boolean; onPay: () => void }) {
   const overdue = it.dueDate < today
   const isIncome = it.type === 'occurrence' && it.plan.kind === 'recurring_income'
   const name = it.type === 'occurrence' ? it.plan.name : `${it.card.name} ekstresi`
@@ -136,7 +136,7 @@ function UpcomingRow({ it, today, onPay }: { it: UpcomingItem; today: string; on
         </div>
       </Link>
       <Amount value={it.amount} tone={isIncome ? 'income' : 'expense'} className="text-sm font-semibold" />
-      <button className="btn btn-pay btn-sm" onClick={onPay}>{isIncome ? 'Alındı' : 'Ödendi'}</button>
+      <button className="btn btn-pay btn-sm" disabled={busy} onClick={onPay}>{isIncome ? 'Alındı' : 'Ödendi'}</button>
     </li>
   )
 }

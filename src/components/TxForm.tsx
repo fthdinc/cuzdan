@@ -23,6 +23,7 @@ export function TxFormSheet({ snap, tx, onClose }: { snap: Snapshot; tx?: Transa
   const [date, setDate] = useState(tx?.date ?? todayISO())
   const [note, setNote] = useState(tx?.note ?? '')
   const [err, setErr] = useState<string | null>(null)
+  const openingDate = snap.accounts.find((a) => a.id === accountId)?.openingDate
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -39,7 +40,8 @@ export function TxFormSheet({ snap, tx, onClose }: { snap: Snapshot; tx?: Transa
       toAccountId: kind === 'transfer' ? toAccountId : undefined,
       categoryId: kind === 'income' || kind === 'expense' ? categoryId || undefined : undefined,
       note: note.trim() || undefined,
-      occurrenceKey: tx?.occurrenceKey,
+      // A transfer/adjustment cannot settle a plan occurrence.
+      occurrenceKey: kind === 'income' || kind === 'expense' ? tx?.occurrenceKey : undefined,
     }
     if (tx) await updateTx({ ...draft, id: tx.id, createdAt: tx.createdAt })
     else await addTx(draft)
@@ -73,7 +75,12 @@ export function TxFormSheet({ snap, tx, onClose }: { snap: Snapshot; tx?: Transa
             </Field>
           ) : <div />}
         </div>
-        <Field label="Tarih"><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required /></Field>
+        <Field
+          label="Tarih"
+          hint={date && openingDate && date < openingDate ? 'Bu tarih hesabın açılış bakiyesinden önce; bakiyeye etki etmez.' : undefined}
+        >
+          <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </Field>
         <Field label="Not"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="İsteğe bağlı" /></Field>
         {tx?.occurrenceKey && <div className="text-xs text-slate-500">Bu işlem bir plan vadesini kapatıyor. Silinirse vade tekrar bekliyor olur.</div>}
         <FormError msg={err} />

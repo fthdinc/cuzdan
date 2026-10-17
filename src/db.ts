@@ -81,18 +81,42 @@ export async function exportBackup(): Promise<Backup> {
   return { app: 'cuzdan', version: 1, exportedAt: new Date().toISOString(), accounts, transactions, plans, categories }
 }
 
+const isNum = (v: unknown) => typeof v === 'number' && Number.isFinite(v)
+const optNum = (v: unknown) => v === undefined || isNum(v)
+
+/** Shape check of a backup file. Throws (Turkish message) on malformed input. */
+export function validateBackup(data: unknown): Snapshot {
+  const bad = (why: string): never => { throw new Error(`Geçersiz yedek dosyası: ${why}`) }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) bad('beklenen biçimde değil')
+  const d = data as Record<string, unknown>
+  if (d.app !== undefined && d.app !== 'cuzdan') bad('bu uygulamaya ait değil')
+  if (d.version !== undefined && d.version !== 1) bad('desteklenmeyen sürüm')
+  const keys = ['accounts', 'transactions', 'plans', 'categories'] as const
+  for (const k of keys) {
+    const list = d[k]
+    if (!Array.isArray(list)) bad(`"${k}" listesi yok`)
+    for (const o of list as unknown[]) {
+      if (!o || typeof o !== 'object' || typeof (o as { id?: unknown }).id !== 'string') bad(`"${k}" içinde kimliksiz kayıt`)
+    }
+  }
+  const s = d as unknown as Snapshot
+  if (s.accounts.some((a) => !isNum(a.openingBalance) || (a.card !== undefined && !isNum(a.card.limit)))) bad('hesap tutarı sayı değil')
+  if (s.transactions.some((t) => !isNum(t.amount))) bad('işlem tutarı sayı değil')
+  if (s.plans.some((p) =>
+    p.kind === 'loan' ? !isNum(p.installmentAmount) || !optNum(p.principal)
+    : p.kind === 'card_installment' ? !isNum(p.totalAmount)
+    : !isNum(p.amount))) bad('plan tutarı sayı değil')
+  return s
+}
+
 /** Throws on malformed input. Replaces the whole DB. */
 export async function importBackup(data: unknown): Promise<void> {
-  const d = data as Partial<Backup>
-  const keys = ['accounts', 'transactions', 'plans', 'categories'] as const
-  if (!d || typeof d !== 'object' || keys.some((k) => !Array.isArray(d[k]))) {
-    throw new Error('Geçersiz yedek dosyası')
-  }
+  const d = validateBackup(data)
   await db.transaction('rw', [db.accounts, db.transactions, db.plans, db.categories], async () => {
     await Promise.all([db.accounts.clear(), db.transactions.clear(), db.plans.clear(), db.categories.clear()])
-    await db.accounts.bulkAdd(d.accounts!)
-    await db.transactions.bulkAdd(d.transactions!)
-    await db.plans.bulkAdd(d.plans!)
-    await db.categories.bulkAdd(d.categories!)
+    await db.accounts.bulkAdd(d.accounts)
+    await db.transactions.bulkAdd(d.transactions)
+    await db.plans.bulkAdd(d.plans)
+    await db.categories.bulkAdd(d.categories)
   })
 }

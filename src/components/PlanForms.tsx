@@ -57,7 +57,13 @@ export function PlanFormSheet({ snap, kind, plan, onClose }: {
   const [frequency, setFrequency] = useState<Frequency>(rec?.frequency ?? 'monthly')
   const [startDate, setStartDate] = useState(rec?.startDate ?? today)
   const [endDate, setEndDate] = useState(rec?.endDate ?? '')
+  const [settlePast, setSettlePast] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+  // Payment history is keyed by occurrence index; changing the schedule would re-map it.
+  const scheduleLocked = !!plan && (
+    Object.keys(plan.overrides ?? {}).length > 0 ||
+    snap.transactions.some((t) => t.occurrenceKey?.startsWith(`${plan.id}:`))
+  )
 
   const rate = Number(ratePct.replace(',', '.')) / 100
   const p = parseMoney(principal)
@@ -68,15 +74,19 @@ export function PlanFormSheet({ snap, kind, plan, onClose }: {
     e.preventDefault()
     setErr(null)
     if (!name.trim()) return setErr('Ad girin')
-    if (!accountId) return setErr(isCardInst ? 'Kart seçin' : 'Hesap seçin')
-    const common = { name: name.trim(), accountId, categoryId: categoryId || undefined, active }
+    // The stored account may be archived; fall back to the first eligible active account.
+    const eligible = snap.accounts.filter((a) => !a.archived && (!isCardInst || a.kind === 'credit_card'))
+    const accId = eligible.some((a) => a.id === accountId) ? accountId : eligible[0]?.id
+    if (!accId) return setErr(isCardInst ? 'Kart seçin' : 'Hesap seçin')
+    const common = { name: name.trim(), accountId: accId, categoryId: categoryId || undefined, active }
 
     if (plan) {
       if (rec) {
         const a = parseMoney(amount)
         if (!a || a <= 0) return setErr('Geçerli bir tutar girin')
-        if (endDate && endDate < startDate) return setErr('Bitiş tarihi başlangıçtan önce olamaz')
-        await savePlan({ ...rec, ...common, amount: a, variable, frequency, startDate, endDate: endDate || undefined })
+        const sched = scheduleLocked ? { frequency: rec.frequency, startDate: rec.startDate } : { frequency, startDate }
+        if (endDate && endDate < sched.startDate) return setErr('Bitiş tarihi başlangıçtan önce olamaz')
+        await savePlan({ ...rec, ...common, ...sched, amount: a, variable, endDate: endDate || undefined })
       } else {
         await savePlan({ ...plan, ...common })
       }
@@ -90,7 +100,7 @@ export function PlanFormSheet({ snap, kind, plan, onClose }: {
       if (!(n > 0)) return setErr('Toplam taksit sayısı girin')
       if (!(rem >= 1) || rem > n) return setErr('Kalan taksit 1 ile toplam arasında olmalı')
       const loan = loanFromRemaining({
-        id: newId(), name: common.name, accountId, categoryId: common.categoryId, createdAt: Date.now(),
+        id: newId(), name: common.name, accountId: accId, categoryId: common.categoryId, createdAt: Date.now(),
         installmentAmount: inst, totalInstallments: n, remainingInstallments: rem, nextDueDate: nextDue,
       })
       if (computed && p) { loan.principal = p; loan.monthlyRate = rate }
@@ -113,6 +123,7 @@ export function PlanFormSheet({ snap, kind, plan, onClose }: {
       await savePlan({
         ...common, id: newId(), kind: kind as 'recurring_expense' | 'recurring_income', createdAt: Date.now(),
         amount: a, variable, frequency, startDate, endDate: endDate || undefined,
+        settledBefore: settlePast && startDate < today ? today : undefined,
       })
     }
     onClose()
@@ -187,11 +198,19 @@ export function PlanFormSheet({ snap, kind, plan, onClose }: {
               options={(Object.keys(FREQ_LABEL) as Frequency[]).map((f) => ({ value: f, label: FREQ_LABEL[f] }))}
               value={frequency}
               onChange={setFrequency}
+              disabled={scheduleLocked}
             />
             <div className="grid grid-cols-2 gap-3">
-              <Field label="İlk vade"><input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required /></Field>
+              <Field label="İlk vade"><input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={scheduleLocked} required /></Field>
               <Field label="Bitiş (isteğe bağlı)"><input className="input" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
             </div>
+            {scheduleLocked && <div className="text-xs text-slate-500">Periyot ve ilk vade: Geçmiş ödemeler olduğu için değiştirilemez; planı bitirip yenisini oluşturun.</div>}
+            {!plan && startDate < today && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={settlePast} onChange={(e) => setSettlePast(e.target.checked)} />
+                Bugünden önceki vadeler ödenmiş sayılsın
+              </label>
+            )}
           </>
         )}
 

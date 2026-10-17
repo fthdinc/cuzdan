@@ -4,7 +4,7 @@ import {
   type Account, type Category, type Snapshot,
 } from '../domain'
 import { addTx, removeAccount, saveAccount } from '../actions'
-import { db, exportBackup, importBackup, newId } from '../db'
+import { db, exportBackup, importBackup, newId, validateBackup } from '../db'
 import { parseSigned, sortCategories } from '../lib/format'
 import { AccountFormSheet } from '../components/AccountForm'
 import { AccountSelect, Amount, CategoryDot, Empty, Field, FormError, MoneyInput, PageHeader, Section, Segmented, Sheet } from '../components/ui'
@@ -185,16 +185,18 @@ function Backup() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `cuzdan-yedek-${data.exportedAt.slice(0, 10)}.json`
+    a.download = `cuzdan-yedek-${todayISO()}.json`
     a.click()
-    URL.revokeObjectURL(url)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   const restore = async (f: File) => {
     setMsg(null)
     setErr(null)
     try {
-      const data = JSON.parse(await f.text())
+      let data: unknown
+      try { data = JSON.parse(await f.text()) } catch { throw new Error('Yedek dosyası okunamadı (JSON değil)') }
+      validateBackup(data)
       if (!confirm('Mevcut tüm veriler silinip yedekteki verilerle değiştirilecek. Devam edilsin mi?')) return
       await importBackup(data)
       setMsg('Yedek yüklendi.')

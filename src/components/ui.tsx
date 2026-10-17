@@ -111,15 +111,16 @@ export function CategorySelect({ categories, kind, value, onChange }: {
   )
 }
 
-export function Segmented<T extends string>({ options, value, onChange }: {
-  options: { value: T; label: string }[]; value: T; onChange: (v: T) => void
+export function Segmented<T extends string>({ options, value, onChange, disabled }: {
+  options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; disabled?: boolean
 }) {
   return (
-    <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+    <div className={`flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800 ${disabled ? 'opacity-60' : ''}`}>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
+          disabled={disabled}
           onClick={() => onChange(o.value)}
           className={`flex-1 rounded-lg px-2 py-1.5 text-sm font-medium transition ${
             value === o.value ? 'bg-white shadow-sm dark:bg-slate-950' : 'text-slate-500 dark:text-slate-400'

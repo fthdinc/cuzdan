@@ -9,8 +9,8 @@ const isOpen = (status: string) => status === 'pending' || status === 'overdue'
 /**
  * income/expense: tx dated in the month (transfers and adjustments excluded); expense also includes
  * card installment parts billed in statements whose kesim is in the month (category = plan.categoryId).
- * projectedIncome/Expense: pending/overdue occurrences due in the month, plus the unpaid remainder
- * (total - paid) of card statements due in the month whose status is not 'paid' or 'open'.
+ * projectedIncome/Expense: pending/overdue occurrences due in the month. Card statements are not added:
+ * card expense tx and billed installment parts are already counted in expense.
  * byCategory: expenses grouped by categoryId (null = uncategorized), sorted by amount desc.
  */
 export function monthSummary(snap: Snapshot, month: string, today: ISODate): MonthSummary {
@@ -37,9 +37,6 @@ export function monthSummary(snap: Snapshot, month: string, today: ISODate): Mon
   let projectedExpense = 0
   for (const card of cards(snap)) {
     for (const p of billedParts(card, snap)) if (inMonth(p.kesim)) addExpense(p.categoryId, p.amount)
-    for (const s of cardStatements(card, snap, today)) {
-      if (inMonth(s.dueDate) && s.status !== 'paid' && s.status !== 'open') projectedExpense += Math.max(0, s.total - s.paid)
-    }
   }
   for (const plan of snap.plans) {
     for (const o of occurrencesForPlan(plan, snap, today, end)) {

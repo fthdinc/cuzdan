@@ -25,7 +25,9 @@ export function AccountFormSheet({ account, onClose }: { account?: Account; onCl
   const [statementDay, setStatementDay] = useState(String(account?.card?.statementDay ?? ''))
   const [dueDays, setDueDays] = useState(String(account?.card?.dueDaysAfterStatement ?? 10))
   const [minRate, setMinRate] = useState(
-    account?.card?.minPaymentRate !== undefined ? String(Math.round(account.card.minPaymentRate * 100)) : '',
+    account?.card?.minPaymentRate !== undefined
+      ? (Math.round(account.card.minPaymentRate * 10000) / 100).toLocaleString('tr-TR', { maximumFractionDigits: 2, useGrouping: false })
+      : '',
   )
   const [err, setErr] = useState<string | null>(null)
   const isCard = kind === 'credit_card'
@@ -42,8 +44,8 @@ export function AccountFormSheet({ account, onClose }: { account?: Account; onCl
       const due = Number(dueDays)
       if (!lim || lim <= 0) return setErr('Kart limiti girin')
       if (!Number.isInteger(day) || day < 1 || day > 31) return setErr('Kesim günü 1-31 olmalı')
-      if (!Number.isInteger(due) || due < 1 || due > 40) return setErr('Son ödeme gün sayısı geçersiz')
-      const rate = minRate.trim() ? Number(minRate.replace(',', '.')) : undefined
+      if (!Number.isInteger(due) || due < 1 || due > 25) return setErr('Son ödeme gün sayısı 1-25 olmalı')
+      const rate = minRate.trim() ? Number(minRate.trim().replace(',', '.')) : undefined
       if (rate !== undefined && (!(rate > 0) || rate > 100)) return setErr('Asgari oran 1-100 arası olmalı')
       if (bal < 0) return setErr('Kart borcunu pozitif girin')
       card = { limit: lim, statementDay: day, dueDaysAfterStatement: due, ...(rate !== undefined && { minPaymentRate: rate / 100 }) }
@@ -74,7 +76,7 @@ export function AccountFormSheet({ account, onClose }: { account?: Account; onCl
             <Field label="Kart limiti"><MoneyInput value={limit} onChange={setLimit} /></Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Kesim günü"><input className="input" inputMode="numeric" value={statementDay} onChange={(e) => setStatementDay(e.target.value)} placeholder="1-31" /></Field>
-              <Field label="Son ödeme (kesimden kaç gün sonra)"><input className="input" inputMode="numeric" value={dueDays} onChange={(e) => setDueDays(e.target.value)} /></Field>
+              <Field label="Son ödeme (kesimden kaç gün sonra)"><input className="input" inputMode="numeric" value={dueDays} onChange={(e) => setDueDays(e.target.value)} placeholder="1-25" /></Field>
             </div>
             <Field label="Asgari ödeme oranı (%)" hint="Boş bırakılırsa limit 50.000 ₺ altında %20, üstünde %40">
               <input className="input" inputMode="decimal" value={minRate} onChange={(e) => setMinRate(e.target.value)} placeholder="Otomatik" />

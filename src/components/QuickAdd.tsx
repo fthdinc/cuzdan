@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { formatMoney, parseQuickEntry, todayISO, type Snapshot } from '../domain'
 import { addTx, lastAccountId } from '../actions'
 import { relDay } from '../lib/format'
@@ -11,17 +11,24 @@ export function QuickAdd({ snap }: { snap: Snapshot }) {
   const entry = text.trim() ? parseQuickEntry(text, snap.categories, today) : null
   const cat = entry?.categoryId ? snap.categories.find((c) => c.id === entry.categoryId) : undefined
   const accounts = snap.accounts.filter((a) => !a.archived)
+  const account = accounts.find((a) => a.id === accountId)
+
+  // Re-validate when accounts change (e.g. the selected one was archived).
+  useEffect(() => {
+    if (!account) setAccountId(lastAccountId(snap.accounts) ?? '')
+  }, [account, snap.accounts])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!entry || !accountId) return
+    const accId = account?.id ?? accounts[0]?.id
+    if (!entry || !accId) return
     // Clear before the async write so text typed meanwhile is not wiped afterwards.
     setText('')
     await addTx({
       date: entry.date,
       kind: entry.kind,
       amount: entry.amount,
-      accountId,
+      accountId: accId,
       categoryId: entry.categoryId,
       note: entry.note || undefined,
     })
@@ -69,6 +76,9 @@ export function QuickAdd({ snap }: { snap: Snapshot }) {
           <span className="text-xs text-slate-400">Tutar bulunamadı</span>
         ) : null}
       </div>
+      {entry && account && entry.date < account.openingDate && (
+        <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">Bu tarih hesabın açılış bakiyesinden önce; bakiyeye etki etmez.</div>
+      )}
     </form>
   )
 }
