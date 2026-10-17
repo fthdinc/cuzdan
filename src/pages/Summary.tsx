@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
   accountBalance, addDays, debtSummary, formatMoney, monthSummary, overdraftUsage, todayISO, upcoming,
@@ -11,48 +11,102 @@ import { QuickAdd } from '../components/QuickAdd'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { ForecastCard } from '../components/ForecastCard'
-import { fmtDate, formatMoneyShort, monthLabel, relDay } from '../lib/format'
+import { IncomeFormSheet } from '../components/IncomeForm'
+import { TxFormSheet } from '../components/TxForm'
+import { fmtDate, formatMoneyShort, monthLabel, percentSuffix, relDay } from '../lib/format'
 
 const KIND_LABEL = { cash: 'Nakit', bank: 'Banka', credit_card: 'Kredi kartı' }
 
 export function SummaryPage({ snap }: { snap: Snapshot }) {
+  const [sheet, setSheet] = useState<'income' | 'expense' | null>(null)
+  // Only the default account: the account list adds nothing beyond "Toplam bakiye".
+  const showAccounts = snap.accounts.filter((a) => !a.archived).length > 1
   return (
     <div className="space-y-4">
       <PageHeader title="Özet" />
       <ErrorBoundary><SetupChecklist snap={snap} /></ErrorBoundary>
+      <Section><MonthCard snap={snap} /></Section>
+      <div className="grid grid-cols-2 gap-2">
+        <button className="btn btn-pay py-3 text-base" onClick={() => setSheet('income')}>+ Gelir ekle</button>
+        <button className="btn bg-rose-600 py-3 text-base text-white hover:bg-rose-500" onClick={() => setSheet('expense')}>− Gider ekle</button>
+      </div>
       <ErrorBoundary><QuickAdd snap={snap} /></ErrorBoundary>
-      <Section><MonthCards snap={snap} /></Section>
       <Section title="Bakiye gidişatı"><ForecastCard snap={snap} /></Section>
       <Section title="Yaklaşan 30 gün"><Upcoming snap={snap} /></Section>
-      <div className="grid gap-4 md:grid-cols-2">
-        <Section title="Hesaplar"><Balances snap={snap} /></Section>
+      <div className={`grid gap-4 ${showAccounts ? 'md:grid-cols-2' : ''}`}>
+        {showAccounts && <Section title="Hesaplar"><Balances snap={snap} /></Section>}
         <Section title="Toplam borç"><Debt snap={snap} /></Section>
       </div>
+      {sheet === 'income' && <IncomeFormSheet snap={snap} onClose={() => setSheet(null)} />}
+      {sheet === 'expense' && <TxFormSheet snap={snap} onClose={() => setSheet(null)} />}
     </div>
   )
 }
 
-function MonthCards({ snap }: { snap: Snapshot }) {
+/** Net liquid money (active bank + cash); negative balances (KMH) reduce it and can make it negative. */
+function liquidBalance(snap: Snapshot, today: string) {
+  const liquid = snap.accounts.filter((a) => !a.archived && a.kind !== 'credit_card')
+  return {
+    balance: liquid.reduce((s, a) => s + accountBalance(a, snap, today), 0),
+    overdraftLimit: liquid.reduce((s, a) => s + (a.overdraftLimit ?? 0), 0),
+  }
+}
+
+/** This month: income, spent, what is left (income - expense), spent/income bar, then the carried-over total balance. */
+function MonthCard({ snap }: { snap: Snapshot }) {
   const today = todayISO()
   const m = monthSummary(snap, today.slice(0, 7), today)
+  const ratio = m.income > 0 ? m.expense / m.income : null
+  const pct = ratio === null ? 0 : Math.round(ratio * 100)
+  const { balance, overdraftLimit } = liquidBalance(snap, today)
+  const used = Math.max(0, -balance)
   return (
     <div>
       <div className="mb-3 text-sm font-semibold text-slate-500 dark:text-slate-400">{monthLabel(m.month)}</div>
-      <div className="grid grid-cols-3 gap-2">
-        <Stat label="Gelir" value={<Amount value={m.income} tone="income" />} sub={m.projectedIncome > 0 ? <>+ <Amount value={m.projectedIncome} tone="neutral" /> beklenen</> : null} />
-        <Stat label="Gider" value={<Amount value={m.expense} tone="expense" />} sub={m.projectedExpense > 0 ? <>+ <Amount value={m.projectedExpense} tone="neutral" /> beklenen</> : null} />
-        <Stat label="Net" value={<Amount value={m.net} signed />} />
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Stat label="Bu ay gelir" value={<Amount value={m.income} tone="income" />} />
+        <Stat label="Harcanan" value={<Amount value={m.expense} tone="expense" />} />
+        <Stat label="Kalan" value={<Amount value={m.net} tone={m.net < 0 ? 'expense' : 'income'} />} />
+      </div>
+      <div className="mt-3">
+        <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+          <span className="font-medium">
+            {ratio === null ? (m.expense > 0 ? 'Bu ay henüz gelir girilmedi' : 'Bu ay henüz gelir yok') : `Gelirinin %${pct}'${percentSuffix(pct)} harcadın`}
+          </span>
+        </div>
+        <ProgressBar value={ratio ?? (m.expense > 0 ? 1 : 0)} tone={ratio === null ? (m.expense > 0 ? 'red' : 'green') : ratio > 1 ? 'red' : ratio > 0.8 ? 'amber' : 'green'} />
+      </div>
+      {(m.projectedIncome > 0 || m.projectedExpense > 0) && (
+        <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+          <span>Beklenen gelir: <Amount value={m.projectedIncome} tone={m.projectedIncome > 0 ? 'income' : 'neutral'} /></span>
+          <span>Beklenen gider: <Amount value={m.projectedExpense} tone={m.projectedExpense > 0 ? 'expense' : 'neutral'} /></span>
+        </div>
+      )}
+      <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-sm text-slate-500 dark:text-slate-400">{balance < 0 ? 'Toplam bakiye (borç / KMH)' : 'Toplam bakiye'}</span>
+          <Amount value={balance} tone={balance < 0 ? 'expense' : 'neutral'} className="text-lg font-semibold" />
+        </div>
+        {balance < 0 && (overdraftLimit > 0 ? (
+          <div className="mt-1.5">
+            <ProgressBar value={used / overdraftLimit} tone={used > overdraftLimit ? 'red' : 'amber'} />
+            <div className={`mt-1 text-xs tabular-nums ${used > overdraftLimit ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'}`}>
+              KMH kullanımı {formatMoneyShort(used).replace(' ₺', '')} / {formatMoneyShort(overdraftLimit)}{used > overdraftLimit && ' · limit aşıldı'}
+            </div>
+          </div>
+        ) : <div className="mt-0.5 text-xs text-rose-600 dark:text-rose-400">Eksi bakiye (borç)</div>)}
+        <div className="mt-0.5 text-[11px] text-slate-400">Önceki aylardan devreden dahil, banka + nakit</div>
       </div>
     </div>
   )
 }
 
-function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
+function Stat({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/60">
-      <div className="text-xs text-slate-500 dark:text-slate-400">{label}</div>
-      <div className="mt-1 text-base font-semibold sm:text-lg">{value}</div>
-      {sub && <div className="mt-0.5 text-[11px] text-slate-400">{sub}</div>}
+    // Phone: one row per figure (amounts stay unclipped); wider screens: three tiles.
+    <div className="flex items-baseline justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-950/60 sm:block sm:p-3">
+      <div className="text-sm text-slate-500 dark:text-slate-400 sm:text-xs">{label}</div>
+      <div className="text-xl font-semibold sm:mt-1">{value}</div>
     </div>
   )
 }
@@ -61,8 +115,7 @@ function Balances({ snap }: { snap: Snapshot }) {
   const today = todayISO()
   const accounts = snap.accounts.filter((a) => !a.archived)
   const rows = accounts.map((a) => ({ a, bal: accountBalance(a, snap, today) }))
-  // Net liquid money: negative bank/cash balances (KMH) reduce it and can make it negative.
-  const cash = rows.filter((r) => r.a.kind !== 'credit_card').reduce((s, r) => s + r.bal, 0)
+  const cash = liquidBalance(snap, today).balance
   return (
     <div>
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">

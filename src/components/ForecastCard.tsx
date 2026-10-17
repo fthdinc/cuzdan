@@ -1,6 +1,5 @@
 import { balanceForecast, todayISO, type Snapshot } from '../domain'
 import { fmtDate, formatMoneyShort } from '../lib/format'
-import { Amount, ProgressBar } from './ui'
 
 const W = 300
 const H = 120
@@ -27,7 +26,6 @@ export function ForecastCard({ snap }: { snap: Snapshot }) {
 
   const negative = f.firstNegativeDate
   const overLimit = f.overdraftLimit > 0 && -f.minBalance > f.overdraftLimit
-  const ratio = f.spentRatio
   const color = (v: number) => (v < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')
 
   return (
@@ -72,32 +70,6 @@ export function ForecastCard({ snap }: { snap: Snapshot }) {
           {' · '}{overLimit ? 'KMH limitini aşıyor' : 'KMH kullanılacak'}
         </div>
       )}
-
-      <div>
-        <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
-          <span className="font-medium">
-            {ratio === null ? 'Bu ay henüz gelir yok' : `Gelirinin %${Math.round(ratio * 100)}'${suffix(Math.round(ratio * 100))} harcadın`}
-          </span>
-          <span className="text-xs text-slate-500 tabular-nums">
-            <Amount value={f.expenseThisMonth} tone="expense" /> / <Amount value={f.incomeThisMonth} tone="income" />
-          </span>
-        </div>
-        {ratio !== null && <ProgressBar value={ratio} tone={ratio > 1 ? 'red' : ratio > 0.8 ? 'amber' : 'green'} />}
-      </div>
     </div>
   )
-}
-
-/**
- * Turkish accusative suffix after a percentage read aloud ("%78'ini", "%100'ünü", "%40'ını").
- * Decided by the last spoken word of the number.
- */
-function suffix(p: number): string {
-  if (p === 0) return 'ını'
-  const ones = ['', 'ini', 'sini', 'ünü', 'ünü', 'ini', 'sını', 'sini', 'ini', 'unu']
-  const tens = ['', 'unu', 'sini', 'unu', 'ını', 'sini', 'ını', 'ini', 'ini', 'ını']
-  if (p % 1000 === 0) return 'ini' // bin
-  if (p % 100 === 0) return 'ünü' // yüz
-  if (p % 10 === 0) return tens[(p % 100) / 10]
-  return ones[p % 10]
 }

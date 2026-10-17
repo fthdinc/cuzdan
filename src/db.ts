@@ -57,6 +57,21 @@ db.on('populate', (tx) => {
   tx.table('categories').bulkAdd(defaultCategories())
 })
 
+/**
+ * Accounts are optional: when the DB has no account at all (archived ones included), add one bank account so
+ * income/expense can be entered right away. Early opening date so back-dated entries still count. Idempotent.
+ */
+export async function ensureDefaultAccount(d: Dexie = db): Promise<void> {
+  const accounts = d.table<Account, string>('accounts')
+  await d.transaction('rw', accounts, async () => {
+    if (await accounts.count()) return
+    await accounts.add({ id: newId(), name: 'Ana hesap', kind: 'bank', openingBalance: 0, openingDate: '2000-01-01' })
+  })
+}
+
+// Sticky: runs on every open (vipDb may be used before the open completes).
+db.on('ready', (vipDb) => ensureDefaultAccount(vipDb), true)
+
 /** Live snapshot of the whole DB. undefined while the first query is loading. */
 export function useSnapshot(): Snapshot | undefined {
   return useLiveQuery(async () => {

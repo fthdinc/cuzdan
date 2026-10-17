@@ -64,3 +64,17 @@ export function sortCategories<T extends { name: string }>(list: T[]): T[] {
   const other = (n: string) => (n.startsWith('Diğer') ? 1 : 0)
   return [...list].sort((a, b) => other(a.name) - other(b.name) || a.name.localeCompare(b.name, 'tr'))
 }
+
+/**
+ * Turkish accusative suffix after a percentage read aloud ("%78'ini", "%100'ünü", "%40'ını").
+ * Decided by the last spoken word of the number.
+ */
+export function percentSuffix(p: number): string {
+  if (p === 0) return 'ını'
+  const ones = ['', 'ini', 'sini', 'ünü', 'ünü', 'ini', 'sını', 'sini', 'ini', 'unu']
+  const tens = ['', 'unu', 'sini', 'unu', 'ını', 'sini', 'ını', 'ini', 'ini', 'ını']
+  if (p % 1000 === 0) return 'ini' // bin
+  if (p % 100 === 0) return 'ünü' // yüz
+  if (p % 10 === 0) return tens[(p % 100) / 10]
+  return ones[p % 10]
+}

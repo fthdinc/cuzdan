@@ -17,8 +17,8 @@ beforeAll(async () => {
 })
 
 describe('db v2', () => {
-  it('upgrade from v1 keeps existing data and adds an empty debts table', async () => {
-    expect(await mod.db.accounts.count()).toBe(1)
+  it('upgrade from v1 keeps existing data and adds an empty debts table (no default account added)', async () => {
+    expect(await mod.db.accounts.toArray()).toMatchObject([{ id: 'b' }])
     expect(await mod.db.transactions.get('x')).toMatchObject({ amount: 10 })
     expect(await mod.db.debts.count()).toBe(0)
   })
@@ -39,6 +39,17 @@ describe('db v2', () => {
     expect(await mod.db.debts.count()).toBe(0)
     expect(await mod.db.transactions.where('debtId').equals('d').count()).toBe(0)
     expect(await mod.db.transactions.count()).toBe(1)
+  })
+})
+
+describe('addIncome', () => {
+  it('plain income adds one tx; monthly also adds a plan settled by that tx', async () => {
+    await actions.addIncome({ amount: 300000, date: '2026-10-10', note: 'Freelance iş', accountId: 'b', monthly: false })
+    expect(await mod.db.transactions.where('date').equals('2026-10-10').toArray()).toMatchObject([{ kind: 'income', amount: 300000, note: 'Freelance iş' }])
+    await actions.addIncome({ amount: 4500000, date: '2026-10-11', note: 'Maaş', accountId: 'b', categoryId: 'c', monthly: true })
+    const plans = await mod.db.plans.toArray()
+    expect(plans).toMatchObject([{ kind: 'recurring_income', name: 'Maaş', amount: 4500000, frequency: 'monthly', startDate: '2026-10-11', accountId: 'b', categoryId: 'c' }])
+    expect(await mod.db.transactions.where('occurrenceKey').equals(`${plans[0].id}:0`).toArray()).toMatchObject([{ kind: 'income', amount: 4500000, date: '2026-10-11' }])
   })
 })
 

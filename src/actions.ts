@@ -1,6 +1,6 @@
 // All DB writes the UI performs.
 import { db, newId } from './db'
-import { debtPaymentKind, type Account, type ID, type ISODate, type Kurus, type Occurrence, type PersonalDebt, type Plan, type Transaction } from './domain'
+import { debtPaymentKind, monthlyIncomePlan, todayISO, type Account, type ID, type ISODate, type Kurus, type Occurrence, type PersonalDebt, type Plan, type Transaction } from './domain'
 import type { BuiltImport } from './domain/import'
 
 export type TxDraft = Omit<Transaction, 'id' | 'createdAt'>
@@ -10,6 +10,24 @@ export async function addTx(draft: TxDraft): Promise<ID> {
   await db.transactions.add({ ...clean(draft), id, createdAt: Date.now() })
   rememberAccount(draft.accountId)
   return id
+}
+
+/**
+ * Income entered from Özet ("Gelir ekle"). monthly: also creates a monthly recurring_income plan whose first
+ * occurrence is settled by this tx, so later months show as expected income. Atomic.
+ */
+export async function addIncome(input: {
+  amount: Kurus; date: ISODate; note: string; accountId: ID; categoryId?: ID; monthly: boolean
+}): Promise<void> {
+  await db.transaction('rw', db.transactions, db.plans, async () => {
+    let occurrenceKey: string | undefined
+    if (input.monthly) {
+      const r = monthlyIncomePlan({ id: newId(), name: input.note, amount: input.amount, date: input.date, accountId: input.accountId, categoryId: input.categoryId, createdAt: Date.now() }, todayISO())
+      await db.plans.add(clean(r.plan))
+      occurrenceKey = r.occurrenceKey
+    }
+    await addTx({ date: input.date, kind: 'income', amount: input.amount, accountId: input.accountId, categoryId: input.categoryId, note: input.note, occurrenceKey })
+  })
 }
 
 export async function updateTx(tx: Transaction): Promise<void> {

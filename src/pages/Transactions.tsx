@@ -72,10 +72,12 @@ function TxList({ snap, onEdit }: { snap: Snapshot; onEdit: (t: Transaction) => 
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <select className={sel} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-          <option value="">Tüm hesaplar</option>
-          {snap.accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
+        {snap.accounts.length > 1 && (
+          <select className={sel} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <option value="">Tüm hesaplar</option>
+            {snap.accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        )}
         <select className={sel} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
           <option value="">Tüm kategoriler</option>
           {sortCategories(snap.categories).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -107,12 +109,20 @@ function TxRow({ t, snap, onClick }: { t: Transaction; snap: Snapshot; onClick: 
   const acc = (id?: string) => snap.accounts.find((a) => a.id === id)?.name ?? '?'
   const cat = snap.categories.find((c) => c.id === t.categoryId)
   const debt = t.debtId ? snap.debts?.find((d) => d.id === t.debtId) : undefined
+  // Income / expense: the description is the label (category below it); falls back to the category name.
+  const described = !t.debtId && (t.kind === 'income' || t.kind === 'expense') && !!t.note
   const title =
     t.debtId ? (debt?.direction === 'lent' ? 'Elden alacak' : 'Elden borç')
     : t.kind === 'transfer' ? 'Transfer'
     : t.kind === 'adjustment' ? 'Bakiye düzeltme'
+    : described ? t.note!.charAt(0).toLocaleUpperCase('tr-TR') + t.note!.slice(1)
     : cat?.name ?? 'Kategorisiz'
-  const sub = t.kind === 'transfer' ? `${acc(t.accountId)} → ${acc(t.toAccountId)}` : acc(t.accountId)
+  const multiAccount = snap.accounts.filter((a) => !a.archived).length > 1
+  const sub = [
+    described ? cat?.name ?? 'Kategorisiz' : null,
+    t.kind === 'transfer' ? `${acc(t.accountId)} → ${acc(t.toAccountId)}` : multiAccount ? acc(t.accountId) : null,
+    t.occurrenceKey ? 'plan ödemesi' : null,
+  ].filter(Boolean).join(' · ')
   return (
     <li>
       <button className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50" onClick={onClick}>
@@ -120,12 +130,9 @@ function TxRow({ t, snap, onClick }: { t: Transaction; snap: Snapshot; onClick: 
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">
             {title}
-            {t.note && <span className="font-normal text-slate-500"> · {t.note}</span>}
+            {t.note && !described && <span className="font-normal text-slate-500"> · {t.note}</span>}
           </div>
-          <div className="truncate text-xs text-slate-400">
-            {sub}
-            {t.occurrenceKey && ' · plan ödemesi'}
-          </div>
+          {sub && <div className="truncate text-xs text-slate-400">{sub}</div>}
         </div>
         {t.kind === 'income' ? <Amount value={t.amount} tone="income" signed className="text-sm font-semibold" />
           : t.kind === 'expense' ? <Amount value={-t.amount} tone="expense" signed className="text-sm font-semibold" />

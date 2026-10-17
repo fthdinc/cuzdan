@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { formatMoney, type Account, type Category, type Kurus } from '../domain'
 import { ErrorBoundary } from './ErrorBoundary'
 import { sortCategories } from '../lib/format'
+import { activeAccounts } from '../lib/accounts'
 
 export function PageHeader({ title, action }: { title: string; action?: ReactNode }) {
   return (
@@ -91,7 +92,7 @@ export function AccountSelect({ accounts, value, onChange, filter, allowEmpty }:
   accounts: Account[]; value: string; onChange: (id: string) => void
   filter?: (a: Account) => boolean; allowEmpty?: string
 }) {
-  const list = accounts.filter((a) => !a.archived && (!filter || filter(a)))
+  const list = activeAccounts(accounts, filter)
   return (
     <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
       {allowEmpty !== undefined && <option value="">{allowEmpty}</option>}

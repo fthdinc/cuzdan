@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import {
   annuityInstallment, formatMoney, loanFromRemaining, parseMoney, todayISO,
-  type Frequency, type Plan, type PlanKind, type Snapshot,
+  type Account, type Frequency, type Plan, type PlanKind, type Snapshot,
 } from '../domain'
 import { savePlan } from '../actions'
 import { newId } from '../db'
 import { moneyToInput } from '../lib/format'
 import { FREQ_LABEL } from '../lib/plans'
 import { AccountSelect, CategorySelect, Field, FormError, MoneyInput, Segmented, Sheet } from './ui'
+import { isLiquid, needsAccountPicker } from '../lib/accounts'
 
 const TITLES: Record<PlanKind, string> = {
   loan: 'Kredi',
@@ -39,6 +40,9 @@ export function PlanForm({ snap, kind, plan, onDone: onClose }: {
   const rec = plan && (plan.kind === 'recurring_expense' || plan.kind === 'recurring_income') ? plan : undefined
   const catKind = kind === 'recurring_income' ? 'income' : 'expense'
   const cards = snap.accounts.filter((a) => a.kind === 'credit_card' && !a.archived)
+  // Income is received into bank/cash; card installments need a card. Picker hidden when there is one choice.
+  const accFilter = isCardInst ? (a: Account) => a.kind === 'credit_card' : kind === 'recurring_income' ? isLiquid : undefined
+  const showAccount = isCardInst || needsAccountPicker(snap.accounts, accFilter)
   const defaultCat = kind === 'loan' ? snap.categories.find((c) => c.name === 'Kredi')?.id
     : kind === 'recurring_income' ? snap.categories.find((c) => c.name === 'Maaş')?.id
     : kind === 'recurring_expense' ? snap.categories.find((c) => c.name === 'Fatura')?.id
@@ -86,7 +90,7 @@ export function PlanForm({ snap, kind, plan, onDone: onClose }: {
     setErr(null)
     if (!name.trim()) return setErr('Ad girin')
     // The stored account may be archived; fall back to the first eligible active account.
-    const eligible = snap.accounts.filter((a) => !a.archived && (!isCardInst || a.kind === 'credit_card'))
+    const eligible = snap.accounts.filter((a) => !a.archived && (!accFilter || accFilter(a)))
     // Fallback payer: a bank/cash account rather than a card when one exists (cards first only for card installments).
     const accId = eligible.some((a) => a.id === accountId) ? accountId
       : (isCardInst ? undefined : eligible.find((a) => a.kind !== 'credit_card')?.id) ?? eligible[0]?.id
@@ -148,11 +152,13 @@ export function PlanForm({ snap, kind, plan, onDone: onClose }: {
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus={!plan}
           placeholder={kind === 'loan' ? 'ör. İhtiyaç kredisi' : isCardInst ? 'ör. Telefon' : kind === 'recurring_income' ? 'ör. Maaş' : 'ör. Elektrik'} />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label={isCardInst ? 'Kart' : kind === 'recurring_income' ? 'Yatan hesap' : 'Ödeyen hesap'}>
-          <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId}
-            filter={isCardInst ? (a) => a.kind === 'credit_card' : undefined} allowEmpty={accountId ? undefined : 'Seçin'} />
-        </Field>
+      <div className={showAccount ? 'grid grid-cols-2 gap-3' : ''}>
+        {showAccount && (
+          <Field label={isCardInst ? 'Kart' : kind === 'recurring_income' ? 'Yatan hesap' : 'Ödeyen hesap'}>
+            <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId}
+              filter={accFilter} allowEmpty={accountId ? undefined : 'Seçin'} />
+          </Field>
+        )}
         <Field label="Kategori">
           <CategorySelect categories={snap.categories} kind={catKind} value={categoryId} onChange={setCategoryId} />
         </Field>

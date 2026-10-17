@@ -10,7 +10,7 @@ export { parseMoney, formatMoney } from './money'
 export { addMonths, addDays, todayISO } from './dates'
 
 // --- plans / occurrences ---
-export { loanFromRemaining, annuityInstallment, occurrencesForPlan, loanProgress, estimatedBillAmount } from './plans'
+export { loanFromRemaining, annuityInstallment, occurrencesForPlan, loanProgress, estimatedBillAmount, monthlyIncomePlan } from './plans'
 
 // --- bills (recurring_expense plans) ---
 export { billInfo, billHistory, billThisMonth, changeRatio, type BillMonth, type BillMonthState } from './bills'
@@ -31,3 +31,5 @@ export { balanceForecast, type BalanceForecast, type ForecastDay } from './forec
 
 // --- quick entry ---
 export { parseQuickEntry } from './quickEntry'
+// suggestCategory: category for a free-text description (income/expense "Açıklama").
+export { suggestCategory } from './categoryMatch'

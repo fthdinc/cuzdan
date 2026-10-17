@@ -132,3 +132,19 @@ export function loanProgress(plan: LoanPlan, snap: Snapshot, today: ISODate): {
     nextDue: open[0],
   }
 }
+
+/**
+ * Monthly recurring_income plan for an income entered once with "Her ay tekrarlanıyor": first occurrence = the entry's
+ * date, settled by the entry's tx (occurrenceKey). Occurrences between the entry date and today (back-dated entry)
+ * count as presettled, not overdue.
+ */
+export function monthlyIncomePlan(input: {
+  id: string; name: string; amount: Kurus; date: ISODate; accountId: string; categoryId?: string; createdAt: number
+}, today: ISODate): { plan: RecurringPlan; occurrenceKey: string } {
+  const plan: RecurringPlan = {
+    id: input.id, kind: 'recurring_income', name: input.name, accountId: input.accountId, categoryId: input.categoryId,
+    active: true, createdAt: input.createdAt, amount: input.amount, variable: false, frequency: 'monthly', startDate: input.date,
+    ...(input.date < today && { settledBefore: today }),
+  }
+  return { plan, occurrenceKey: `${input.id}:0` }
+}

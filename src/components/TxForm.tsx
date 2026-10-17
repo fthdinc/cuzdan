@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
-import { todayISO, type Snapshot, type Transaction, type TxKind } from '../domain'
+import { suggestCategory, todayISO, type Snapshot, type Transaction, type TxKind } from '../domain'
 import { addTx, deleteTx, lastAccountId, updateTx, type TxDraft } from '../actions'
 import { moneyToInput, parseSigned } from '../lib/format'
 import { AccountSelect, CategorySelect, Field, FormError, MoneyInput, Segmented, Sheet } from './ui'
+import { isLiquid, needsAccountPicker, pickAccount } from '../lib/accounts'
 
 const KINDS: { value: TxKind; label: string }[] = [
   { value: 'expense', label: 'Gider' },
@@ -20,23 +21,37 @@ export function TxFormSheet({ snap, tx, onClose }: { snap: Snapshot; tx?: Transa
   const [accountId, setAccountId] = useState(tx?.accountId ?? lastAccountId(snap.accounts) ?? '')
   const [toAccountId, setToAccountId] = useState(tx?.toAccountId ?? '')
   const [categoryId, setCategoryId] = useState(tx?.categoryId ?? '')
+  // New entries: category follows the description until picked by hand.
+  const [catTouched, setCatTouched] = useState(!!tx)
   const [date, setDate] = useState(tx?.date ?? todayISO())
   const [note, setNote] = useState(tx?.note ?? '')
   const [err, setErr] = useState<string | null>(null)
   const openingDate = snap.accounts.find((a) => a.id === accountId)?.openingDate
+  // Income goes to bank/cash. With a single choice (the default account) the picker is hidden.
+  const accFilter = kind === 'income' ? isLiquid : undefined
+  const showAccount = kind === 'transfer' || needsAccountPicker(snap.accounts, accFilter)
+  const catKind = kind === 'income' || kind === 'expense' ? kind : null
+
+  const changeNote = (v: string) => {
+    setNote(v)
+    if (!catTouched && catKind) setCategoryId(suggestCategory(v, snap.categories, catKind)?.id ?? '')
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     const k = parseSigned(amount)
     if (k === null || k === 0) return setErr('Geçerli bir tutar girin')
     if (kind !== 'adjustment' && k < 0) return setErr('Tutar pozitif olmalı (yönü tür belirler)')
-    if (!accountId) return setErr('Hesap seçin')
-    if (kind === 'transfer' && (!toAccountId || toAccountId === accountId)) return setErr('Farklı bir hedef hesap seçin')
+    // Selected (or, with the picker hidden, the only) eligible account. An edited tx keeps its own account.
+    const keepOwn = tx && accountId === tx.accountId && kind === tx.kind
+    const accId = keepOwn ? accountId : pickAccount(snap.accounts, accountId, accFilter)
+    if (!accId) return setErr('Hesap seçin')
+    if (kind === 'transfer' && (!toAccountId || toAccountId === accId)) return setErr('Farklı bir hedef hesap seçin')
     const draft: TxDraft = {
       date,
       kind,
       amount: k,
-      accountId,
+      accountId: accId,
       toAccountId: kind === 'transfer' ? toAccountId : undefined,
       categoryId: kind === 'income' || kind === 'expense' ? categoryId || undefined : undefined,
       note: note.trim() || undefined,
@@ -58,23 +73,32 @@ export function TxFormSheet({ snap, tx, onClose }: { snap: Snapshot; tx?: Transa
   return (
     <Sheet title={tx ? 'İşlemi düzenle' : 'Yeni işlem'} onClose={onClose}>
       <form className="space-y-3" onSubmit={submit}>
-        <Segmented options={KINDS} value={kind} onChange={(v) => { setKind(v); setCategoryId('') }} />
+        <Segmented options={KINDS} value={kind} onChange={(v) => {
+          setKind(v)
+          setCategoryId(!catTouched && (v === 'income' || v === 'expense') ? suggestCategory(note, snap.categories, v)?.id ?? '' : '')
+        }} />
         <Field label="Tutar" hint={kind === 'adjustment' ? 'Düzeltmede eksi tutar bakiyeyi azaltır (ör. -150)' : undefined}>
           <MoneyInput value={amount} onChange={setAmount} autoFocus={!tx} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={kind === 'transfer' ? 'Kaynak hesap' : 'Hesap'}>
-            <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId} />
-          </Field>
+        <Field label="Açıklama">
+          <input className="input" value={note} onChange={(e) => changeNote(e.target.value)}
+            placeholder={kind === 'income' ? 'ör. Maaş, kira geliri, freelance iş' : kind === 'expense' ? 'ör. Market alışverişi, benzin' : 'İsteğe bağlı'} />
+        </Field>
+        <div className={showAccount ? 'grid grid-cols-2 gap-3' : 'empty:hidden'}>
+          {showAccount && (
+            <Field label={kind === 'transfer' ? 'Kaynak hesap' : 'Hesap'}>
+              <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId} filter={accFilter} />
+            </Field>
+          )}
           {kind === 'transfer' ? (
             <Field label="Hedef hesap">
               <AccountSelect accounts={snap.accounts} value={toAccountId} onChange={setToAccountId} allowEmpty="Seçin" />
             </Field>
           ) : kind === 'income' || kind === 'expense' ? (
             <Field label="Kategori">
-              <CategorySelect categories={snap.categories} kind={kind} value={categoryId} onChange={setCategoryId} />
+              <CategorySelect categories={snap.categories} kind={kind} value={categoryId} onChange={(v) => { setCatTouched(true); setCategoryId(v) }} />
             </Field>
-          ) : <div />}
+          ) : null}
         </div>
         <Field
           label="Tarih"
@@ -82,7 +106,6 @@ export function TxFormSheet({ snap, tx, onClose }: { snap: Snapshot; tx?: Transa
         >
           <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </Field>
-        <Field label="Not"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="İsteğe bağlı" /></Field>
         {tx?.occurrenceKey && <div className="text-xs text-slate-500">Bu işlem bir plan vadesini kapatıyor. Silinirse vade tekrar bekliyor olur.</div>}
         <FormError msg={err} />
         <div className="flex gap-2">

@@ -47,15 +47,18 @@ export function QuickAdd({ snap }: { snap: Snapshot }) {
         />
         <button className="btn btn-primary shrink-0" disabled={!entry || !accountId}>Ekle</button>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <select
-          className="rounded-lg border-0 bg-slate-100 px-2 py-1 text-xs font-medium dark:bg-slate-800"
-          value={accountId}
-          onChange={(e) => setAccountId(e.target.value)}
-          aria-label="Hesap"
-        >
-          {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
+      <div className="mt-2 flex flex-wrap items-center gap-2 empty:hidden">
+        {/* Only one account (the default): nothing to choose. */}
+        {accounts.length > 1 && (
+          <select
+            className="rounded-lg border-0 bg-slate-100 px-2 py-1 text-xs font-medium dark:bg-slate-800"
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            aria-label="Hesap"
+          >
+            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        )}
         {entry ? (
           <span
             className={`rounded-full px-2.5 py-1 text-xs font-medium tabular-nums ${

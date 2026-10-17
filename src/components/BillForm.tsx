@@ -8,6 +8,7 @@ import { newId } from '../db'
 import { moneyToInput } from '../lib/format'
 import { FREQ_LABEL } from '../lib/plans'
 import { AccountSelect, CategorySelect, Field, FormError, MoneyInput, Segmented, Sheet } from './ui'
+import { needsAccountPicker } from '../lib/accounts'
 import { BillIcon } from './BillIcon'
 
 const TYPES = Object.keys(BILL_TYPE_LABEL) as BillType[]
@@ -51,6 +52,7 @@ export function BillFormSheet({ snap, plan, initialType = 'electricity', onClose
   const shownName = nameTouched ? name : billDefaultName(type, provider.trim() || undefined)
   const suggestions = BILL_PROVIDERS.filter((p) => p.type === type)
   const isRent = type === 'rent'
+  const showAccount = needsAccountPicker(snap.accounts)
 
   const chooseType = (t: BillType) => {
     setType(t)
@@ -145,10 +147,12 @@ export function BillFormSheet({ snap, plan, initialType = 'electricity', onClose
         <Field label="Ad">
           <input className="input" value={shownName} onChange={(e) => { setNameTouched(true); setName(e.target.value) }} placeholder={isRent ? 'ör. Ev kirası' : 'ör. Ev elektriği'} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Ödeyen hesap / kart">
-            <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId} allowEmpty={accountId ? undefined : 'Seçin'} />
-          </Field>
+        <div className={showAccount ? 'grid grid-cols-2 gap-3' : ''}>
+          {showAccount && (
+            <Field label="Ödeyen hesap / kart">
+              <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId} allowEmpty={accountId ? undefined : 'Seçin'} />
+            </Field>
+          )}
           <Field label="Kategori">
             <CategorySelect categories={snap.categories} kind="expense" value={categoryId} onChange={setCategoryId} />
           </Field>

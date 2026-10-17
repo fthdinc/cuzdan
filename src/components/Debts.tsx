@@ -7,6 +7,7 @@ import { deleteDebt, deleteTx, lastAccountId, payDebt, saveDebt } from '../actio
 import { newId } from '../db'
 import { fmtDate, moneyToInput } from '../lib/format'
 import { AccountSelect, Amount, Empty, Field, FormError, MoneyInput, ProgressBar, Segmented, Sheet } from './ui'
+import { isLiquid, needsAccountPicker } from '../lib/accounts'
 
 const DIRECTIONS: { value: DebtDirection; label: string }[] = [
   { value: 'borrowed', label: 'Borç aldım' },
@@ -112,10 +113,21 @@ export function DebtFormSheet({ snap, debt, onClose }: { snap: Snapshot; debt?: 
         <Field label="Vade (opsiyonel)" hint="Ne zamana kadar ödenecek / tahsil edilecek">
           <input className="input" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
         </Field>
-        <Field label={borrowed ? 'Para hangi hesaba girdi?' : 'Para hangi hesaptan çıktı?'}
-          hint={borrowed ? 'Seçilirse hesabın bakiyesi artar; gelir sayılmaz.' : 'Seçilirse hesabın bakiyesi azalır; gider sayılmaz.'}>
-          <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId} filter={(a) => a.kind !== 'credit_card'} allowEmpty="Hesaba işleme" />
-        </Field>
+        {needsAccountPicker(snap.accounts, isLiquid) ? (
+          <Field label={borrowed ? 'Para hangi hesaba girdi?' : 'Para hangi hesaptan çıktı?'}
+            hint={borrowed ? 'Seçilirse hesabın bakiyesi artar; gelir sayılmaz.' : 'Seçilirse hesabın bakiyesi azalır; gider sayılmaz.'}>
+            <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId} filter={isLiquid} allowEmpty="Hesaba işleme" />
+          </Field>
+        ) : liquid[0] && (
+          // Single bank/cash account: the only choice left is whether the money moved through it.
+          <div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={accountId !== ''} onChange={(e) => setAccountId(e.target.checked ? liquid[0].id : '')} />
+              {borrowed ? 'Para bakiyeme girdi' : 'Para bakiyemden çıktı'}
+            </label>
+            <div className="mt-1 text-xs text-slate-500">{borrowed ? 'Bakiye artar; gelir sayılmaz.' : 'Bakiye azalır; gider sayılmaz.'}</div>
+          </div>
+        )}
         <Field label="Not"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Opsiyonel" /></Field>
         <FormError msg={err} />
         <button className="btn btn-primary w-full">Kaydet</button>
@@ -186,9 +198,11 @@ function DebtDetailSheet({ snap, debt, onClose }: { snap: Snapshot; debt: Person
               <Field label="Tutar"><MoneyInput value={amount} onChange={setAmount} /></Field>
               <Field label="Tarih"><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required /></Field>
             </div>
-            <Field label={borrowed ? 'Hangi hesaptan?' : 'Hangi hesaba?'}>
-              <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId} filter={(a) => a.kind !== 'credit_card'} allowEmpty={accountId ? undefined : 'Seçin'} />
-            </Field>
+            {liquid.length > 1 && (
+              <Field label={borrowed ? 'Hangi hesaptan?' : 'Hangi hesaba?'}>
+                <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId} filter={isLiquid} allowEmpty={accountId ? undefined : 'Seçin'} />
+              </Field>
+            )}
             <FormError msg={err} />
             <button className="btn btn-pay w-full">{verb}</button>
           </form>

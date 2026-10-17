@@ -3,6 +3,7 @@ import { formatMoney, parseMoney, todayISO, type Account, type CardStatement, ty
 import { lastAccountId, payCard, payOccurrence } from '../actions'
 import { moneyToInput, fmtDate } from '../lib/format'
 import { AccountSelect, Field, FormError, MoneyInput, Sheet } from './ui'
+import { isLiquid, needsAccountPicker, pickAccount } from '../lib/accounts'
 
 export type PayTarget =
   | { type: 'occurrence'; plan: Plan; occurrence: Occurrence }
@@ -12,12 +13,6 @@ export type PayTarget =
 function needsSheet(t: PayTarget): boolean {
   if (t.type === 'statement' || t.occurrence.status === 'autopay_pending') return true
   return t.plan.kind === 'recurring_expense' || t.plan.kind === 'recurring_income' ? t.plan.variable : false
-}
-
-/** `id` if it is an active account passing `filter`, otherwise the first such account (or ''). */
-function eligibleAccount(accounts: Account[], id: string, filter?: (a: Account) => boolean): string {
-  const list = accounts.filter((a) => !a.archived && (!filter || filter(a)))
-  return list.some((a) => a.id === id) ? id : (list[0]?.id ?? '')
 }
 
 /**
@@ -32,7 +27,7 @@ export function usePay(snap: Snapshot): { pay: (t: PayTarget) => void; sheet: Re
     if (needsSheet(t) || t.type !== 'occurrence') return setTarget(t)
     const key = t.occurrence.key
     if (inFlight.current.has(key)) return
-    const accountId = eligibleAccount(snap.accounts, t.plan.accountId)
+    const accountId = pickAccount(snap.accounts, t.plan.accountId)
     if (!accountId) return setTarget(t)
     inFlight.current.add(key)
     setBusy(key)
@@ -53,9 +48,11 @@ function PaySheet({ snap, target, onClose }: { snap: Snapshot; target: PayTarget
   const [amount, setAmount] = useState(() =>
     autopay ? '' : moneyToInput(isStmt ? Math.max(0, target.statement.total - target.statement.paid) : target.occurrence.expected),
   )
-  const accFilter = isStmt ? (a: Account) => a.kind !== 'credit_card' : undefined
+  const income = !isStmt && target.plan.kind === 'recurring_income'
+  // Statement payments and income use bank/cash; bills and loans may be paid by card too.
+  const accFilter = isStmt || income ? isLiquid : undefined
   const [accountId, setAccountId] = useState(() =>
-    isStmt ? (lastAccountId(nonCards) ?? '') : eligibleAccount(snap.accounts, target.plan.accountId),
+    isStmt ? (lastAccountId(nonCards) ?? '') : pickAccount(snap.accounts, target.plan.accountId, accFilter),
   )
   const [date, setDate] = useState(() => (autopay ? target.occurrence.dueDate : todayISO()))
   const [err, setErr] = useState<string | null>(null)
@@ -68,7 +65,7 @@ function PaySheet({ snap, target, onClose }: { snap: Snapshot; target: PayTarget
     const k = parseMoney(amount)
     if (!k || k <= 0) return setErr('Geçerli bir tutar girin')
     // An archived account may still be the stored value; fall back to the first eligible one.
-    const accId = eligibleAccount(snap.accounts, accountId, accFilter)
+    const accId = pickAccount(snap.accounts, accountId, accFilter)
     if (!accId) return setErr('Hesap seçin')
     if (saving) return
     setSaving(true)
@@ -104,14 +101,16 @@ function PaySheet({ snap, target, onClose }: { snap: Snapshot; target: PayTarget
             <button type="button" className="chip" onClick={() => setAmount(moneyToInput(Math.max(0, target.statement.total - target.statement.paid)))}>Tamamı</button>
           </div>
         )}
-        <Field label={!isStmt && target.plan.kind === 'recurring_income' ? 'Yatan hesap' : 'Ödenen hesap'}>
-          <AccountSelect
-            accounts={snap.accounts}
-            value={accountId}
-            onChange={setAccountId}
-            filter={accFilter}
-          />
-        </Field>
+        {needsAccountPicker(snap.accounts, accFilter) && (
+          <Field label={income ? 'Yatan hesap' : 'Ödenen hesap'}>
+            <AccountSelect
+              accounts={snap.accounts}
+              value={accountId}
+              onChange={setAccountId}
+              filter={accFilter}
+            />
+          </Field>
+        )}
         <Field label="Tarih"><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required /></Field>
         <FormError msg={err} />
         <button className="btn btn-primary w-full" disabled={saving}>Ödendi olarak kaydet</button>

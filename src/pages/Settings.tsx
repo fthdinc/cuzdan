@@ -8,6 +8,7 @@ import { db, exportBackup, importBackup, newId, validateBackup } from '../db'
 import { parseSigned, sortCategories } from '../lib/format'
 import { AccountFormSheet } from '../components/AccountForm'
 import { AccountSelect, Amount, CategoryDot, Empty, Field, FormError, MoneyInput, PageHeader, Section, Segmented, Sheet } from '../components/ui'
+import { activeAccounts, isLiquid, needsAccountPicker } from '../lib/accounts'
 
 const KIND_LABEL = { cash: 'Nakit', bank: 'Banka', credit_card: 'Kredi kartı' }
 
@@ -28,6 +29,11 @@ function Accounts({ snap }: { snap: Snapshot }) {
   const sorted = [...snap.accounts].sort((a, b) => Number(!!a.archived) - Number(!!b.archived))
 
   const remove = async (a: Account) => {
+    // Gelir / giderler bir banka veya nakit hesabına işlenir; sonuncusu kalmalı.
+    if (isLiquid(a) && activeAccounts(snap.accounts, isLiquid).length === 1) {
+      alert('Son banka / nakit hesabı silinemez. Adını "Düzenle" ile değiştirebilirsin.')
+      return
+    }
     if (!confirm(`"${a.name}" silinsin mi? İşlemi olan hesaplar arşivlenir.`)) return
     const r = await removeAccount(a.id)
     if (r === 'archived') alert('Hesabın işlemleri olduğu için arşivlendi.')
@@ -35,6 +41,9 @@ function Accounts({ snap }: { snap: Snapshot }) {
 
   return (
     <>
+      <p className="mb-2 text-xs text-slate-500">
+        Hesap eklemek isteğe bağlı. Tek hesapla tüm gelir ve giderlerin ona işlenir; bankaları, nakdi veya kredi kartlarını ayrı takip etmek istersen buradan ekle.
+      </p>
       {sorted.length === 0 ? <Empty>Hesap yok</Empty> : (
         <ul className="divide-y divide-slate-100 dark:divide-slate-800">
           {sorted.map((a) => (
@@ -96,7 +105,9 @@ function Adjust({ snap }: { snap: Snapshot }) {
   return (
     <form className="space-y-3" onSubmit={submit}>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Hesap"><AccountSelect accounts={snap.accounts} value={accountId} onChange={(v) => { setAccountId(v); setMsg(null) }} /></Field>
+        {needsAccountPicker(snap.accounts) && (
+          <Field label="Hesap"><AccountSelect accounts={snap.accounts} value={accountId} onChange={(v) => { setAccountId(v); setMsg(null) }} /></Field>
+        )}
         <Field label={isCard ? 'Gerçek borç' : 'Gerçek bakiye'}><MoneyInput value={real} onChange={setReal} /></Field>
       </div>
       <div className="flex flex-wrap justify-between gap-2 text-sm">
