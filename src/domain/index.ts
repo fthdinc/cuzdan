@@ -25,5 +25,9 @@ export { cardStatements, accountBalance, cardFutureInstallments, minPaymentRate,
 // --- summaries ---
 export { monthSummary, upcoming, debtSummary } from './summaries'
 
+// --- KMH / personal debts / forecast ---
+export { debtStatus, debtPaymentKind, overdraftUsage, type DebtStatus, type OverdraftUsage } from './debts'
+export { balanceForecast, type BalanceForecast, type ForecastDay } from './forecast'
+
 // --- quick entry ---
 export { parseQuickEntry } from './quickEntry'

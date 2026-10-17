@@ -42,6 +42,7 @@ export function TxFormSheet({ snap, tx, onClose }: { snap: Snapshot; tx?: Transa
       note: note.trim() || undefined,
       // A transfer/adjustment cannot settle a plan occurrence.
       occurrenceKey: kind === 'income' || kind === 'expense' ? tx?.occurrenceKey : undefined,
+      debtId: kind === 'income' || kind === 'expense' ? tx?.debtId : undefined,
     }
     if (tx) await updateTx({ ...draft, id: tx.id, createdAt: tx.createdAt })
     else await addTx(draft)

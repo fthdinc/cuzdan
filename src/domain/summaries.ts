@@ -1,5 +1,6 @@
 import { accountBalance, billedParts, cardFutureInstallments, cardStatements } from './cards'
 import { daysInMonth } from './dates'
+import { debtStatus } from './debts'
 import { loanEnd, occurrencesForPlan } from './plans'
 import type { DebtSummary, ID, ISODate, Kurus, MonthSummary, Snapshot, UpcomingItem } from './types'
 
@@ -8,7 +9,7 @@ const cards = (snap: Snapshot) => snap.accounts.filter((a) => a.kind === 'credit
 const isOpen = (status: string) => status === 'pending' || status === 'overdue' || status === 'autopay_pending'
 
 /**
- * income/expense: tx dated in the month (transfers and adjustments excluded); expense also includes
+ * income/expense: tx dated in the month (transfers, adjustments and debt-linked tx (debtId) excluded); expense also includes
  * card installment parts billed in statements whose kesim is in the month (category = plan.categoryId).
  * projectedIncome/Expense: pending/overdue/autopay_pending occurrences due in the month (variable bills at their estimate). Card statements are not added:
  * card expense tx and billed installment parts are already counted in expense.
@@ -29,7 +30,7 @@ export function monthSummary(snap: Snapshot, month: string, today: ISODate): Mon
     byCat.set(k, (byCat.get(k) ?? 0) + amount)
   }
   for (const t of snap.transactions) {
-    if (!inMonth(t.date)) continue
+    if (!inMonth(t.date) || t.debtId) continue
     if (t.kind === 'income') income += t.amount
     else if (t.kind === 'expense') addExpense(t.categoryId, t.amount)
   }
@@ -75,7 +76,10 @@ export function upcoming(snap: Snapshot, today: ISODate, to: ISODate): UpcomingI
   return items.sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0))
 }
 
-/** Active loans only (inactive plans have no occurrences). */
+/**
+ * Active loans only (inactive plans have no occurrences). overdraft = negative bank/cash balances.
+ * personalDebts / receivables = remaining of open borrowed / lent personal debts; receivables are not in total.
+ */
 export function debtSummary(snap: Snapshot, today: ISODate): DebtSummary {
   let loansRemaining = 0
   for (const plan of snap.plans) {
@@ -88,8 +92,18 @@ export function debtSummary(snap: Snapshot, today: ISODate): DebtSummary {
     cardsCurrent += Math.max(0, -accountBalance(card, snap, today))
     cardsFuture += cardFutureInstallments(card, snap, today)
   }
+  let overdraft = 0
+  for (const a of snap.accounts) if (a.kind !== 'credit_card') overdraft += Math.max(0, -accountBalance(a, snap, today))
+  let personalDebts = 0
+  let receivables = 0
+  for (const d of snap.debts ?? []) {
+    const { remaining } = debtStatus(d, snap, today)
+    if (d.direction === 'borrowed') personalDebts += remaining
+    else receivables += remaining
+  }
   return {
-    loansRemaining, cardsCurrent, cardsFutureInstallments: cardsFuture,
-    total: loansRemaining + cardsCurrent + cardsFuture,
+    loansRemaining, cardsCurrent, cardsFutureInstallments: cardsFuture, overdraft, personalDebts,
+    total: loansRemaining + cardsCurrent + cardsFuture + overdraft + personalDebts,
+    receivables,
   }
 }

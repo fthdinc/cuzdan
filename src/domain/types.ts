@@ -20,6 +20,7 @@ export interface Account {
   openingBalance: Kurus
   openingDate: ISODate
   card?: CardSettings
+  overdraftLimit?: Kurus // bank only: KMH (kredili mevduat) limiti; balance may go down to -overdraftLimit
   archived?: boolean
 }
 
@@ -37,6 +38,27 @@ export interface Transaction {
   note?: string
   occurrenceKey?: string // set when this tx settles a plan occurrence: `${planId}:${index}`
   importId?: string // set on tx created by a statement import (undo deletes exactly these)
+  // Set on tx linked to a PersonalDebt (principal or payment). Counted in balances, excluded from income/expense stats.
+  debtId?: ID
+  createdAt: number
+}
+
+export type DebtDirection = 'borrowed' | 'lent' // borrowed = elden borç (I owe), lent = alacak (owed to me)
+
+/**
+ * Elden borç / alacak. If accountId is set, a principal tx (borrowed: income, lent: expense, with debtId) moved the
+ * money at `date`. Payments are tx with debtId in the opposite direction (borrowed: expense, lent: income).
+ */
+export interface PersonalDebt {
+  id: ID
+  direction: DebtDirection
+  counterparty: string
+  amount: Kurus
+  date: ISODate
+  dueDate?: ISODate
+  accountId?: ID
+  note?: string
+  closed?: boolean // closed manually: remaining is no longer counted
   createdAt: number
 }
 
@@ -153,6 +175,7 @@ export interface Snapshot {
   transactions: Transaction[]
   plans: Plan[]
   categories: Category[]
+  debts?: PersonalDebt[] // optional: older backups / fixtures have none
 }
 
 export interface MonthSummary {
@@ -173,7 +196,10 @@ export interface DebtSummary {
   loansRemaining: Kurus // sum of unpaid loan installments (includes interest)
   cardsCurrent: Kurus // sum of current card debt
   cardsFutureInstallments: Kurus // installment parts not yet billed
-  total: Kurus
+  overdraft: Kurus // sum of negative bank/cash balances (KMH / eksi bakiye)
+  personalDebts: Kurus // remaining of open borrowed personal debts
+  total: Kurus // all of the above
+  receivables: Kurus // remaining of open lent personal debts (NOT in total)
 }
 
 export interface QuickEntry {

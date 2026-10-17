@@ -53,8 +53,9 @@ function TxList({ snap, onEdit }: { snap: Snapshot; onEdit: (t: Transaction) => 
   const days = new Map<string, Transaction[]>()
   for (const t of list) days.set(t.date, [...(days.get(t.date) ?? []), t])
 
-  const income = list.filter((t) => t.kind === 'income').reduce((s, t) => s + t.amount, 0)
-  const expense = list.filter((t) => t.kind === 'expense').reduce((s, t) => s + t.amount, 0)
+  // Debt-linked tx (elden borç / alacak) move balances but are not income or expense.
+  const income = list.filter((t) => t.kind === 'income' && !t.debtId).reduce((s, t) => s + t.amount, 0)
+  const expense = list.filter((t) => t.kind === 'expense' && !t.debtId).reduce((s, t) => s + t.amount, 0)
   const sel = 'rounded-lg border-0 bg-slate-100 px-2 py-1.5 text-xs font-medium dark:bg-slate-800'
 
   return (
@@ -105,15 +106,17 @@ function TxList({ snap, onEdit }: { snap: Snapshot; onEdit: (t: Transaction) => 
 function TxRow({ t, snap, onClick }: { t: Transaction; snap: Snapshot; onClick: () => void }) {
   const acc = (id?: string) => snap.accounts.find((a) => a.id === id)?.name ?? '?'
   const cat = snap.categories.find((c) => c.id === t.categoryId)
+  const debt = t.debtId ? snap.debts?.find((d) => d.id === t.debtId) : undefined
   const title =
-    t.kind === 'transfer' ? 'Transfer'
+    t.debtId ? (debt?.direction === 'lent' ? 'Elden alacak' : 'Elden borç')
+    : t.kind === 'transfer' ? 'Transfer'
     : t.kind === 'adjustment' ? 'Bakiye düzeltme'
     : cat?.name ?? 'Kategorisiz'
   const sub = t.kind === 'transfer' ? `${acc(t.accountId)} → ${acc(t.toAccountId)}` : acc(t.accountId)
   return (
     <li>
       <button className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50" onClick={onClick}>
-        <CategoryDot color={t.kind === 'transfer' ? '#6366f1' : t.kind === 'adjustment' ? '#94a3b8' : cat?.color} />
+        <CategoryDot color={t.debtId ? '#f59e0b' : t.kind === 'transfer' ? '#6366f1' : t.kind === 'adjustment' ? '#94a3b8' : cat?.color} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">
             {title}

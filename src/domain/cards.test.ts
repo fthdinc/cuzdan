@@ -173,8 +173,8 @@ describe('summaries', () => {
     }
     const s = fixture([loan], [tx({ amount: 100000, occurrenceKey: 'l:3', date: '2026-09-10' })])
     expect(debtSummary(s, TODAY)).toEqual({
-      loansRemaining: 800000, cardsCurrent: 161668, cardsFutureInstallments: 33333,
-      total: 800000 + 161668 + 33333,
+      loansRemaining: 800000, cardsCurrent: 161668, cardsFutureInstallments: 33333, overdraft: 0, personalDebts: 0,
+      total: 800000 + 161668 + 33333, receivables: 0,
     })
   })
 })

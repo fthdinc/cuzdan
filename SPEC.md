@@ -54,5 +54,19 @@ kendi ana sekmesinde ("Faturalar") yönetilir. Veri modeli olarak `recurring_exp
 - **Faturalar ekranı**: Bu ayın toplam fatura tutarı, ödenen/bekleyen sayısı; türe göre ikonlu liste; her faturada bu ayın durumu,
   tutarı ve geçen aya göre değişim (artış kırmızı, düşüş yeşil). Detayda son 12 ay tutar grafiği ve geçen yılın aynı ayı ile karşılaştırma.
 
+## KMH, bakiye gidişatı, elden borç / alacak (v1.2)
+- **KMH / eksi bakiye**: Banka hesabına opsiyonel KMH limiti (`overdraftLimit`) girilir. Banka/nakit bakiyesi eksiye düşerse
+  hesap satırı kırmızıdır; limit varsa "KMH kullanımı X / Y ₺" ve kullanım çubuğu (limit aşılınca kırmızı), yoksa "Eksi bakiye (borç)".
+  Eksi bakiyeler Toplam borç'ta "KMH / eksi bakiye" satırında borç sayılır. "Nakit + banka (net)" eksi olabilir.
+- **Bakiye gidişatı (Özet)**: Bu ayın günlük likit bakiyesi (aktif banka + nakit toplamı). Bugünden önceki günler gerçekleşen
+  gün sonu bakiyesi; bugün ve sonrası tahmin: ödenmemiş plan vadeleri (gelir +, gider -; kartla ödenenler hariç, onlar ekstreyle gelir),
+  ödenmemiş kart ekstreleri (son ödeme gününde, likit paradan) ve vadesi gelen elden borçlar. Vadesi geçmiş kalemler bugüne uygulanır;
+  vadesi geçmiş alacaklar tahsil edilmiş sayılmaz. Ay sonu tahmini, eksiye düşülen ilk gün ve en düşük bakiye (KMH limiti aşımı uyarısı)
+  ile "Gelirinin %X'ini harcadın" çubuğu gösterilir.
+- **Elden borç / alacak** (Planlar → Borç/Alacak): kişi, tutar, tarih, opsiyonel vade ve hesap. Hesap seçilirse para o hesaba girer
+  (borç) / çıkar (alacak). Ödeme / tahsilat kısmi olabilir ve geri alınabilir. Borçla ilgili işlemler (`debtId`) bakiyeyi etkiler ama
+  gelir/gider istatistiklerine girmez. Kalan elden borçlar Toplam borç'a dahildir; alacaklar ayrı (yeşil) gösterilir, toplama girmez.
+  Silmek bağlı tüm işlemleri de siler. JSON yedeğe dahildir (`debts`; eski yedekler yine yüklenir).
+
 ## Kapsam dışı (sonraki sürümler)
 - Bulut senkron, çoklu kullanıcı, faiz hesabı, bütçe hedefleri, bildirimler.

@@ -8,18 +8,21 @@ import { Amount, Empty, PageHeader, ProgressBar, Segmented } from '../components
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { OccBadge } from '../components/Status'
 import { PlanFormSheet } from '../components/PlanForms'
+import { DebtFormSheet, DebtsList } from '../components/Debts'
 import { fmtDate } from '../lib/format'
 import { FREQ_LABEL, installmentProgress } from '../lib/plans'
 
-const TABS: { value: PlanKind; label: string; add: string }[] = [
+type Tab = PlanKind | 'debts'
+const TABS: { value: Tab; label: string; add: string }[] = [
   { value: 'loan', label: 'Krediler', add: 'Kredi ekle' },
   { value: 'card_installment', label: 'Taksitler', add: 'Taksit ekle' },
   { value: 'recurring_income', label: 'Gelirler', add: 'Gelir ekle' },
+  { value: 'debts', label: 'Borç/Alacak', add: 'Ekle' },
 ]
 
 export function PlansPage({ snap }: { snap: Snapshot }) {
   const [params, setParams] = useSearchParams()
-  const tab = (TABS.find((t) => t.value === params.get('tab'))?.value ?? 'loan') as PlanKind
+  const tab = TABS.find((t) => t.value === params.get('tab'))?.value ?? 'loan'
   const [adding, setAdding] = useState(false)
   if (params.get('tab') === 'recurring_expense') return <Navigate to="/faturalar" replace />
   const plans = snap.plans.filter((p) => p.kind === tab).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'tr'))
@@ -30,8 +33,9 @@ export function PlansPage({ snap }: { snap: Snapshot }) {
     <div className="space-y-4">
       <PageHeader title="Planlar" action={<button className="btn btn-primary" disabled={noCard} onClick={() => setAdding(true)}>+ {meta.add}</button>} />
       <Segmented options={TABS} value={tab} onChange={(v) => setParams({ tab: v }, { replace: true })} />
+      {tab === 'debts' && <ErrorBoundary><DebtsList snap={snap} /></ErrorBoundary>}
       {noCard && <div className="card p-4 text-sm text-slate-500">Taksit eklemek için önce Ayarlar'dan bir kredi kartı ekleyin.</div>}
-      {plans.length === 0 ? (
+      {tab === 'debts' ? null : plans.length === 0 ? (
         <div className="card"><Empty>Henüz kayıt yok</Empty></div>
       ) : (
         <div className="space-y-3">
@@ -42,7 +46,9 @@ export function PlansPage({ snap }: { snap: Snapshot }) {
           ))}
         </div>
       )}
-      {adding && <PlanFormSheet snap={snap} kind={tab} onClose={() => setAdding(false)} />}
+      {adding && (tab === 'debts'
+        ? <DebtFormSheet snap={snap} onClose={() => setAdding(false)} />
+        : <PlanFormSheet snap={snap} kind={tab} onClose={() => setAdding(false)} />)}
     </div>
   )
 }

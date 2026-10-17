@@ -25,7 +25,12 @@ export function BillFormSheet({ snap, plan, initialType = 'electricity', onClose
   const [name, setName] = useState(plan?.name ?? '')
   const [nameTouched, setNameTouched] = useState(!!plan)
   const [subscriberNo, setSubscriberNo] = useState(info?.subscriberNo ?? '')
-  const [accountId, setAccountId] = useState(plan?.accountId ?? snap.accounts.find((a) => !a.archived)?.id ?? '')
+  // Rent is paid from a bank/cash account (not a card) by default; other bills from the first active account.
+  const defaultAccount = (t: BillType) => {
+    const active = snap.accounts.filter((a) => !a.archived)
+    return ((t === 'rent' ? active.find((a) => a.kind !== 'credit_card') : undefined) ?? active[0])?.id ?? ''
+  }
+  const [accountId, setAccountId] = useState(plan?.accountId ?? defaultAccount(initialType))
   const [categoryId, setCategoryId] = useState(plan?.categoryId ?? defaultCat(initialType))
   const [autopay, setAutopay] = useState(info?.autopay ?? false)
   const [variable, setVariable] = useState(plan?.variable ?? initialType !== 'rent')
@@ -52,6 +57,7 @@ export function BillFormSheet({ snap, plan, initialType = 'electricity', onClose
     if (plan) return
     // Replace defaults of the previous type; keep what the user changed.
     if (categoryId === defaultCat(type)) setCategoryId(defaultCat(t))
+    if (accountId === defaultAccount(type)) setAccountId(defaultAccount(t))
     setVariable(t !== 'rent')
     const prov = findProvider(provider)
     if (prov && prov.type !== t) setProvider('')

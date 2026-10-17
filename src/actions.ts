@@ -1,6 +1,6 @@
 // All DB writes the UI performs.
 import { db, newId } from './db'
-import type { Account, ID, ISODate, Kurus, Occurrence, Plan, Transaction } from './domain'
+import { debtPaymentKind, type Account, type ID, type ISODate, type Kurus, type Occurrence, type PersonalDebt, type Plan, type Transaction } from './domain'
 import type { BuiltImport } from './domain/import'
 
 export type TxDraft = Omit<Transaction, 'id' | 'createdAt'>
@@ -80,6 +80,44 @@ export async function removeAccount(id: ID): Promise<'deleted' | 'archived'> {
   }
   await db.accounts.delete(id)
   return 'deleted'
+}
+
+// --- elden borç / alacak ---
+
+const principalNote = (d: PersonalDebt) => `${d.direction === 'borrowed' ? 'Borç alındı' : 'Borç verildi'}: ${d.counterparty}`
+const paymentNote = (d: PersonalDebt) => `${d.direction === 'borrowed' ? 'Borç ödemesi' : 'Tahsilat'}: ${d.counterparty}`
+
+/**
+ * Create or update a personal debt. When debt.accountId is set, keeps exactly one principal tx in sync
+ * (borrowed: income, lent: expense; tagged with debtId). Clearing accountId removes it.
+ */
+export async function saveDebt(debt: PersonalDebt): Promise<void> {
+  await db.transaction('rw', db.debts, db.transactions, async () => {
+    await db.debts.put(clean(debt))
+    const kind = debtPaymentKind(debt) === 'expense' ? 'income' : 'expense'
+    const principal = (await db.transactions.where('debtId').equals(debt.id).toArray()).find((t) => t.kind === kind)
+    if (!debt.accountId) {
+      if (principal) await db.transactions.delete(principal.id)
+      return
+    }
+    await db.transactions.put(clean({
+      ...(principal ?? { id: newId(), createdAt: Date.now() }),
+      date: debt.date, kind, amount: debt.amount, accountId: debt.accountId, note: principalNote(debt), debtId: debt.id,
+    }))
+  })
+}
+
+/** Repay a borrowed debt (money out of accountId) or collect a receivable (money in). */
+export async function payDebt(debt: PersonalDebt, amount: Kurus, accountId: ID, date: ISODate): Promise<void> {
+  await addTx({ date, kind: debtPaymentKind(debt), amount, accountId, note: paymentNote(debt), debtId: debt.id })
+}
+
+/** Deletes the debt and every tx linked to it (principal and payments). */
+export async function deleteDebt(id: ID): Promise<void> {
+  await db.transaction('rw', db.debts, db.transactions, async () => {
+    await db.transactions.where('debtId').equals(id).delete()
+    await db.debts.delete(id)
+  })
 }
 
 // --- statement import ---

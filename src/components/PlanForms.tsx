@@ -87,7 +87,9 @@ export function PlanForm({ snap, kind, plan, onDone: onClose }: {
     if (!name.trim()) return setErr('Ad girin')
     // The stored account may be archived; fall back to the first eligible active account.
     const eligible = snap.accounts.filter((a) => !a.archived && (!isCardInst || a.kind === 'credit_card'))
-    const accId = eligible.some((a) => a.id === accountId) ? accountId : eligible[0]?.id
+    // Fallback payer: a bank/cash account rather than a card when one exists (cards first only for card installments).
+    const accId = eligible.some((a) => a.id === accountId) ? accountId
+      : (isCardInst ? undefined : eligible.find((a) => a.kind !== 'credit_card')?.id) ?? eligible[0]?.id
     if (!accId) return setErr(isCardInst ? 'Kart seçin' : 'Hesap seçin')
     const common = { name: name.trim(), accountId: accId, categoryId: categoryId || undefined, active }
 

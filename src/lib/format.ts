@@ -38,6 +38,11 @@ export function shiftMonth(month: string, n: number): string {
   return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`
 }
 
+/** formatMoney without a zero kuruş part: 320000 -> '3.200 ₺', 125050 -> '1.250,50 ₺'. */
+export function formatMoneyShort(k: Kurus): string {
+  return formatMoney(k).replace(',00 ₺', ' ₺')
+}
+
 /** Kuruş -> editable input text without currency sign, e.g. '1.250,50'. */
 export function moneyToInput(k: Kurus | undefined): string {
   if (k === undefined || k === 0) return ''

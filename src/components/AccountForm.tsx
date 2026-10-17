@@ -27,6 +27,7 @@ export function AccountFormSheet({ account, onClose }: { account?: Account; onCl
   })
   const [openingDate, setOpeningDate] = useState(account?.openingDate ?? todayISO())
   const [limit, setLimit] = useState(moneyToInput(account?.card?.limit))
+  const [overdraft, setOverdraft] = useState(moneyToInput(account?.overdraftLimit))
   const [statementDay, setStatementDay] = useState(String(account?.card?.statementDay ?? ''))
   const [dueDays, setDueDays] = useState(String(account?.card?.dueDaysAfterStatement ?? 10))
   const [minRate, setMinRate] = useState(
@@ -56,6 +57,12 @@ export function AccountFormSheet({ account, onClose }: { account?: Account; onCl
       card = { limit: lim, statementDay: day, dueDaysAfterStatement: due, ...(rate !== undefined && { minPaymentRate: rate / 100 }) }
     }
     if (kind === 'loan') return
+    let overdraftLimit: number | undefined
+    if (kind === 'bank' && overdraft.trim()) {
+      const v = parseMoney(overdraft)
+      if (v === null || v < 0) return setErr('Geçerli bir KMH limiti girin')
+      overdraftLimit = v || undefined
+    }
     await saveAccount({
       id: account?.id ?? newId(),
       name: name.trim(),
@@ -63,6 +70,7 @@ export function AccountFormSheet({ account, onClose }: { account?: Account; onCl
       openingBalance: isCard ? -bal : bal,
       openingDate,
       card,
+      overdraftLimit,
       archived: account?.archived,
     })
     onClose()
@@ -79,6 +87,11 @@ export function AccountFormSheet({ account, onClose }: { account?: Account; onCl
             <Field label={isCard ? 'Güncel borç' : 'Güncel bakiye'}><MoneyInput value={balance} onChange={setBalance} /></Field>
             <Field label="Bakiye tarihi"><input className="input" type="date" value={openingDate} onChange={(e) => setOpeningDate(e.target.value)} required /></Field>
           </div>
+          {kind === 'bank' && (
+            <Field label="KMH limiti (opsiyonel)" hint="Kredili mevduat hesabı: bakiye bu tutara kadar eksiye düşebilir. Eksi bakiye borç olarak gösterilir.">
+              <MoneyInput value={overdraft} onChange={setOverdraft} placeholder="Yok" />
+            </Field>
+          )}
           {isCard && (
             <>
               <Field label="Kart limiti"><MoneyInput value={limit} onChange={setLimit} /></Field>

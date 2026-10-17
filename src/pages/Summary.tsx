@@ -1,16 +1,17 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  accountBalance, addDays, debtSummary, formatMoney, monthSummary, todayISO, upcoming,
+  accountBalance, addDays, debtSummary, formatMoney, monthSummary, overdraftUsage, todayISO, upcoming,
   type Snapshot, type UpcomingItem,
 } from '../domain'
-import { Amount, Empty, PageHeader, Section } from '../components/ui'
+import { Amount, Empty, PageHeader, ProgressBar, Section } from '../components/ui'
 import { OccBadge, StmtBadge } from '../components/Status'
 import { usePay } from '../components/Pay'
 import { QuickAdd } from '../components/QuickAdd'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { SetupChecklist } from '../components/SetupChecklist'
-import { fmtDate, monthLabel, relDay } from '../lib/format'
+import { ForecastCard } from '../components/ForecastCard'
+import { fmtDate, formatMoneyShort, monthLabel, relDay } from '../lib/format'
 
 const KIND_LABEL = { cash: 'Nakit', bank: 'Banka', credit_card: 'Kredi kartı' }
 
@@ -21,6 +22,7 @@ export function SummaryPage({ snap }: { snap: Snapshot }) {
       <ErrorBoundary><SetupChecklist snap={snap} /></ErrorBoundary>
       <ErrorBoundary><QuickAdd snap={snap} /></ErrorBoundary>
       <Section><MonthCards snap={snap} /></Section>
+      <Section title="Bakiye gidişatı"><ForecastCard snap={snap} /></Section>
       <Section title="Yaklaşan 30 gün"><Upcoming snap={snap} /></Section>
       <div className="grid gap-4 md:grid-cols-2">
         <Section title="Hesaplar"><Balances snap={snap} /></Section>
@@ -59,22 +61,36 @@ function Balances({ snap }: { snap: Snapshot }) {
   const today = todayISO()
   const accounts = snap.accounts.filter((a) => !a.archived)
   const rows = accounts.map((a) => ({ a, bal: accountBalance(a, snap, today) }))
+  // Net liquid money: negative bank/cash balances (KMH) reduce it and can make it negative.
   const cash = rows.filter((r) => r.a.kind !== 'credit_card').reduce((s, r) => s + r.bal, 0)
   return (
     <div>
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-        {rows.map(({ a, bal }) => (
-          <li key={a.id} className="flex items-center justify-between py-2">
-            <div>
-              <div className="text-sm font-medium">{a.name}</div>
-              <div className="text-xs text-slate-400">{KIND_LABEL[a.kind]}</div>
-            </div>
-            <Amount value={bal} className="font-medium" />
-          </li>
-        ))}
+        {rows.map(({ a, bal }) => {
+          const od = bal < 0 && a.kind !== 'credit_card' ? overdraftUsage(a, snap, today) : null
+          return (
+            <li key={a.id} className="py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{a.name}</div>
+                  <div className="text-xs text-slate-400">{KIND_LABEL[a.kind]}</div>
+                </div>
+                <Amount value={bal} className="font-medium" />
+              </div>
+              {od && (od.limit !== undefined ? (
+                <div className="mt-1.5">
+                  <ProgressBar value={od.used / od.limit} tone={od.over ? 'red' : 'amber'} />
+                  <div className={`mt-1 text-xs tabular-nums ${od.over ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'}`}>
+                    KMH kullanımı {formatMoneyShort(od.used).replace(' ₺', '')} / {formatMoneyShort(od.limit)}{od.over && ' · limit aşıldı'}
+                  </div>
+                </div>
+              ) : <div className="mt-0.5 text-xs text-rose-600 dark:text-rose-400">Eksi bakiye (borç)</div>)}
+            </li>
+          )
+        })}
       </ul>
       <div className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-sm dark:border-slate-800">
-        <span className="text-slate-500">Nakit + banka</span>
+        <span className="text-slate-500">Nakit + banka (net)</span>
         <Amount value={cash} className="font-semibold" />
       </div>
     </div>
@@ -92,9 +108,17 @@ function Debt({ snap }: { snap: Snapshot }) {
   return (
     <div>
       <div className="mb-2 text-2xl font-semibold"><Amount value={d.total} tone={d.total > 0 ? 'expense' : 'neutral'} /></div>
-      {row('Kalan kredi taksitleri', d.loansRemaining)}
-      {row('Kart borçları', d.cardsCurrent)}
-      {row('Faturalanmamış taksitler', d.cardsFutureInstallments)}
+      {row('Krediler', d.loansRemaining)}
+      {row('Kartlar', d.cardsCurrent)}
+      {row('Gelecek taksitler', d.cardsFutureInstallments)}
+      {row('KMH / eksi bakiye', d.overdraft)}
+      {row('Elden borçlar', d.personalDebts)}
+      {d.receivables > 0 && (
+        <div className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-sm dark:border-slate-800">
+          <Link to="/planlar?tab=debts" className="text-slate-500 hover:text-indigo-600">Alacaklar</Link>
+          <Amount value={d.receivables} tone="income" className="font-medium" />
+        </div>
+      )}
     </div>
   )
 }

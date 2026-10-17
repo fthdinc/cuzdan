@@ -4,12 +4,13 @@ import { Section } from './ui'
 import { AccountFormSheet } from './AccountForm'
 import { PlanFormSheet } from './PlanForms'
 import { BillFormSheet } from './BillForm'
+import { DebtFormSheet } from './Debts'
 
 const DISMISS_KEY = 'cuzdan.setup.dismissed'
 const SKIP_KEY = 'cuzdan.setup.skipped'
 const FIXED: BillType[] = ['rent', 'dues', 'insurance', 'education']
 
-type StepId = 'accounts' | 'income' | 'loans' | 'fixed' | 'bills' | 'installments'
+type StepId = 'accounts' | 'income' | 'loans' | 'fixed' | 'bills' | 'installments' | 'debts'
 type Status = 'done' | 'skipped' | 'todo'
 
 function readSkipped(): StepId[] {
@@ -38,6 +39,7 @@ export function SetupChecklist({ snap }: { snap: Snapshot }) {
     ...(accounts.some((a) => a.kind === 'credit_card')
       ? [{ id: 'installments' as const, label: 'Kartla taksitli alışverişler', sub: 'Devam eden taksitler', done: has('card_installment'), action: 'Ekle' }]
       : []),
+    { id: 'debts', label: 'Elden borç / alacak', sub: 'Arkadaş, aile: aldığın veya verdiğin borçlar', done: (snap.debts?.length ?? 0) > 0, action: 'Ekle' },
   ]
   const status = (s: (typeof steps)[number]): Status => (s.done ? 'done' : skipped.includes(s.id) ? 'skipped' : 'todo')
   const resolved = steps.filter((s) => status(s) !== 'todo').length
@@ -63,6 +65,7 @@ export function SetupChecklist({ snap }: { snap: Snapshot }) {
   else if (open === 'installments') sheet = <PlanFormSheet snap={snap} kind="card_installment" onClose={close} />
   else if (open === 'fixed') sheet = <BillFormSheet snap={snap} initialType="rent" onClose={close} />
   else if (open === 'bills') sheet = <BillFormSheet snap={snap} onClose={close} />
+  else if (open === 'debts') sheet = <DebtFormSheet snap={snap} onClose={close} />
 
   const header = (
     <span className="flex items-center gap-2">

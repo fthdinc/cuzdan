@@ -1,12 +1,13 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { useLiveQuery } from 'dexie-react-hooks'
-import type { Account, Category, Plan, Snapshot, Transaction } from './domain'
+import type { Account, Category, PersonalDebt, Plan, Snapshot, Transaction } from './domain'
 
 export const db = new Dexie('cuzdan') as Dexie & {
   accounts: EntityTable<Account, 'id'>
   transactions: EntityTable<Transaction, 'id'>
   plans: EntityTable<Plan, 'id'>
   categories: EntityTable<Category, 'id'>
+  debts: EntityTable<PersonalDebt, 'id'>
 }
 
 db.version(1).stores({
@@ -14,6 +15,11 @@ db.version(1).stores({
   transactions: 'id, date, accountId, toAccountId, occurrenceKey',
   plans: 'id, kind, accountId',
   categories: 'id, kind',
+})
+// v2: elden borç / alacak table + debtId index on transactions. Existing data is kept.
+db.version(2).stores({
+  transactions: 'id, date, accountId, toAccountId, occurrenceKey, debtId',
+  debts: 'id',
 })
 
 export const newId = () => crypto.randomUUID()
@@ -54,13 +60,14 @@ db.on('populate', (tx) => {
 /** Live snapshot of the whole DB. undefined while the first query is loading. */
 export function useSnapshot(): Snapshot | undefined {
   return useLiveQuery(async () => {
-    const [accounts, transactions, plans, categories] = await Promise.all([
+    const [accounts, transactions, plans, categories, debts] = await Promise.all([
       db.accounts.toArray(),
       db.transactions.toArray(),
       db.plans.toArray(),
       db.categories.toArray(),
+      db.debts.toArray(),
     ])
-    return { accounts, transactions, plans, categories }
+    return { accounts, transactions, plans, categories, debts }
   }, [])
 }
 
@@ -72,13 +79,14 @@ export interface Backup extends Snapshot {
 }
 
 export async function exportBackup(): Promise<Backup> {
-  const [accounts, transactions, plans, categories] = await Promise.all([
+  const [accounts, transactions, plans, categories, debts] = await Promise.all([
     db.accounts.toArray(),
     db.transactions.toArray(),
     db.plans.toArray(),
     db.categories.toArray(),
+    db.debts.toArray(),
   ])
-  return { app: 'cuzdan', version: 1, exportedAt: new Date().toISOString(), accounts, transactions, plans, categories }
+  return { app: 'cuzdan', version: 1, exportedAt: new Date().toISOString(), accounts, transactions, plans, categories, debts }
 }
 
 const isNum = (v: unknown) => typeof v === 'number' && Number.isFinite(v)
@@ -99,8 +107,18 @@ export function validateBackup(data: unknown): Snapshot {
       if (!o || typeof o !== 'object' || typeof (o as { id?: unknown }).id !== 'string') bad(`"${k}" içinde kimliksiz kayıt`)
     }
   }
+  // debts was added later: older backups have none.
+  if (d.debts !== undefined) {
+    if (!Array.isArray(d.debts)) bad('"debts" listesi değil')
+    for (const o of d.debts as unknown[]) {
+      const x = o as Partial<PersonalDebt> | null
+      if (!x || typeof x !== 'object' || typeof x.id !== 'string') bad('"debts" içinde kimliksiz kayıt')
+      if (!isNum(x!.amount)) bad('borç tutarı sayı değil')
+      if (x!.direction !== 'borrowed' && x!.direction !== 'lent') bad('borç yönü geçersiz')
+    }
+  }
   const s = d as unknown as Snapshot
-  if (s.accounts.some((a) => !isNum(a.openingBalance) || (a.card !== undefined && !isNum(a.card.limit)))) bad('hesap tutarı sayı değil')
+  if (s.accounts.some((a) => !isNum(a.openingBalance) || !optNum(a.overdraftLimit) || (a.card !== undefined && !isNum(a.card.limit)))) bad('hesap tutarı sayı değil')
   if (s.transactions.some((t) => !isNum(t.amount))) bad('işlem tutarı sayı değil')
   if (s.plans.some((p) =>
     p.kind === 'loan' ? !isNum(p.installmentAmount) || !optNum(p.principal)
@@ -112,11 +130,12 @@ export function validateBackup(data: unknown): Snapshot {
 /** Throws on malformed input. Replaces the whole DB. */
 export async function importBackup(data: unknown): Promise<void> {
   const d = validateBackup(data)
-  await db.transaction('rw', [db.accounts, db.transactions, db.plans, db.categories], async () => {
-    await Promise.all([db.accounts.clear(), db.transactions.clear(), db.plans.clear(), db.categories.clear()])
+  await db.transaction('rw', [db.accounts, db.transactions, db.plans, db.categories, db.debts], async () => {
+    await Promise.all([db.accounts.clear(), db.transactions.clear(), db.plans.clear(), db.categories.clear(), db.debts.clear()])
     await db.accounts.bulkAdd(d.accounts)
     await db.transactions.bulkAdd(d.transactions)
     await db.plans.bulkAdd(d.plans)
     await db.categories.bulkAdd(d.categories)
+    await db.debts.bulkAdd(d.debts ?? [])
   })
 }
