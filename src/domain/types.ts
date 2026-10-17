@@ -87,7 +87,8 @@ export interface CardInstallmentPlan extends PlanBase {
   preSettledCount: number // parts already billed before tracking started
 }
 
-export type BillType = 'electricity' | 'water' | 'gas' | 'phone' | 'internet' | 'tv' | 'dues' | 'subscription' | 'other'
+export type BillType =
+  | 'rent' | 'dues' | 'electricity' | 'water' | 'gas' | 'internet' | 'phone' | 'tv' | 'subscription' | 'insurance' | 'education' | 'other'
 
 /** Extra info on a recurring_expense plan managed as a bill (Faturalar). Plans without it count as type 'other', no autopay. */
 export interface BillInfo {

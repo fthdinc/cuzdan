@@ -1,18 +1,23 @@
 import { useState, type FormEvent } from 'react'
 import { parseMoney, todayISO, type Account, type AccountKind } from '../domain'
 import { saveAccount } from '../actions'
-import { newId } from '../db'
+import { newId, useSnapshot } from '../db'
 import { moneyToInput, parseSigned } from '../lib/format'
-import { Field, FormError, MoneyInput, Segmented, Sheet } from './ui'
+import { Field, FormError, Loading, MoneyInput, Segmented, Sheet } from './ui'
+import { PlanForm } from './PlanForms'
 
-const KINDS: { value: AccountKind; label: string }[] = [
+// 'loan' is not an account kind: it shows the loan plan form, since users look for loans here.
+const KINDS: { value: AccountKind | 'loan'; label: string }[] = [
   { value: 'bank', label: 'Banka' },
   { value: 'cash', label: 'Nakit' },
   { value: 'credit_card', label: 'Kredi kartı' },
+  { value: 'loan', label: 'Kredi' },
 ]
 
+const Hint = ({ children }: { children: string }) => <div className="text-xs text-slate-500">{children}</div>
+
 export function AccountFormSheet({ account, onClose }: { account?: Account; onClose: () => void }) {
-  const [kind, setKind] = useState<AccountKind>(account?.kind ?? 'bank')
+  const [kind, setKind] = useState<AccountKind | 'loan'>(account?.kind ?? 'bank')
   const [name, setName] = useState(account?.name ?? '')
   // Bank/cash: signed balance. Card: debt entered as positive.
   const [balance, setBalance] = useState(() => {
@@ -50,6 +55,7 @@ export function AccountFormSheet({ account, onClose }: { account?: Account; onCl
       if (bal < 0) return setErr('Kart borcunu pozitif girin')
       card = { limit: lim, statementDay: day, dueDaysAfterStatement: due, ...(rate !== undefined && { minPaymentRate: rate / 100 }) }
     }
+    if (kind === 'loan') return
     await saveAccount({
       id: account?.id ?? newId(),
       name: name.trim(),
@@ -63,29 +69,47 @@ export function AccountFormSheet({ account, onClose }: { account?: Account; onCl
   }
 
   return (
-    <Sheet title={account ? 'Hesabı düzenle' : 'Yeni hesap'} onClose={onClose}>
-      <form className="space-y-3" onSubmit={submit}>
-        {!account && <Segmented options={KINDS} value={kind} onChange={setKind} />}
-        <Field label="Ad"><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={isCard ? 'ör. Bonus Kart' : 'ör. Ziraat Vadesiz'} autoFocus /></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={isCard ? 'Güncel borç' : 'Güncel bakiye'}><MoneyInput value={balance} onChange={setBalance} /></Field>
-          <Field label="Bakiye tarihi"><input className="input" type="date" value={openingDate} onChange={(e) => setOpeningDate(e.target.value)} required /></Field>
-        </div>
-        {isCard && (
-          <>
-            <Field label="Kart limiti"><MoneyInput value={limit} onChange={setLimit} /></Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Kesim günü"><input className="input" inputMode="numeric" value={statementDay} onChange={(e) => setStatementDay(e.target.value)} placeholder="1-31" /></Field>
-              <Field label="Son ödeme (kesimden kaç gün sonra)"><input className="input" inputMode="numeric" value={dueDays} onChange={(e) => setDueDays(e.target.value)} placeholder="1-25" /></Field>
-            </div>
-            <Field label="Asgari ödeme oranı (%)" hint="Boş bırakılırsa limit 50.000 ₺ altında %20, üstünde %40">
-              <input className="input" inputMode="decimal" value={minRate} onChange={(e) => setMinRate(e.target.value)} placeholder="Otomatik" />
-            </Field>
-          </>
-        )}
-        <FormError msg={err} />
-        <button className="btn btn-primary w-full">Kaydet</button>
-      </form>
+    <Sheet title={account ? 'Hesabı düzenle' : kind === 'loan' ? 'Yeni kredi' : 'Yeni hesap'} onClose={onClose}>
+      {!account && <div className="mb-3"><Segmented options={KINDS} value={kind} onChange={setKind} /></div>}
+      {kind === 'loan' ? <LoanSection onDone={onClose} /> : (
+        <form className="space-y-3" onSubmit={submit}>
+          {!account && kind === 'bank' && <Hint>Banka hesabı paranın durduğu yerdir; maaş gibi düzenli gelirleri Kurulum'dan veya Planlar → Gelirler'den ekleyin.</Hint>}
+          <Field label="Ad"><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={isCard ? 'ör. Bonus Kart' : 'ör. Ziraat Vadesiz'} autoFocus /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={isCard ? 'Güncel borç' : 'Güncel bakiye'}><MoneyInput value={balance} onChange={setBalance} /></Field>
+            <Field label="Bakiye tarihi"><input className="input" type="date" value={openingDate} onChange={(e) => setOpeningDate(e.target.value)} required /></Field>
+          </div>
+          {isCard && (
+            <>
+              <Field label="Kart limiti"><MoneyInput value={limit} onChange={setLimit} /></Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Kesim günü"><input className="input" inputMode="numeric" value={statementDay} onChange={(e) => setStatementDay(e.target.value)} placeholder="1-31" /></Field>
+                <Field label="Son ödeme (kesimden kaç gün sonra)"><input className="input" inputMode="numeric" value={dueDays} onChange={(e) => setDueDays(e.target.value)} placeholder="1-25" /></Field>
+              </div>
+              <Field label="Asgari ödeme oranı (%)" hint="Boş bırakılırsa limit 50.000 ₺ altında %20, üstünde %40">
+                <input className="input" inputMode="decimal" value={minRate} onChange={(e) => setMinRate(e.target.value)} placeholder="Otomatik" />
+              </Field>
+            </>
+          )}
+          <FormError msg={err} />
+          <button className="btn btn-primary w-full">Kaydet</button>
+        </form>
+      )}
     </Sheet>
+  )
+}
+
+/** "Kredi" segment: the loan plan form; installments are paid from a bank/cash account, so one must exist. */
+function LoanSection({ onDone }: { onDone: () => void }) {
+  const snap = useSnapshot()
+  if (!snap) return <Loading />
+  const hasPayer = snap.accounts.some((a) => !a.archived && a.kind !== 'credit_card')
+  return (
+    <div className="space-y-3">
+      <Hint>Krediler hesap değil, borç planı olarak takip edilir; taksitleri otomatik hesaplanır.</Hint>
+      {hasPayer
+        ? <PlanForm snap={snap} kind="loan" onDone={onDone} />
+        : <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">Kredi taksitleri bir hesaptan ödenir. Önce "Banka" veya "Nakit" sekmesinden bir hesap ekleyin, sonra krediyi buradan ekleyin.</div>}
+    </div>
   )
 }

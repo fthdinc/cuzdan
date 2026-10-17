@@ -22,6 +22,17 @@ const int = (s: string) => (/^\d+$/.test(s.trim()) ? Number(s) : NaN)
 export function PlanFormSheet({ snap, kind, plan, onClose }: {
   snap: Snapshot; kind: PlanKind; plan?: Plan; onClose: () => void
 }) {
+  return (
+    <Sheet title={`${TITLES[kind]}${plan ? ' düzenle' : ''}`} onClose={onClose}>
+      <PlanForm snap={snap} kind={kind} plan={plan} onDone={onClose} />
+    </Sheet>
+  )
+}
+
+/** The plan form without a sheet (also embedded in "Yeni hesap" for loans). */
+export function PlanForm({ snap, kind, plan, onDone: onClose }: {
+  snap: Snapshot; kind: PlanKind; plan?: Plan; onDone: () => void
+}) {
   const today = todayISO()
   const isCardInst = kind === 'card_installment'
   const isRecurring = kind === 'recurring_expense' || kind === 'recurring_income'
@@ -130,99 +141,97 @@ export function PlanFormSheet({ snap, kind, plan, onClose }: {
   }
 
   return (
-    <Sheet title={`${TITLES[kind]}${plan ? ' düzenle' : ''}`} onClose={onClose}>
-      <form className="space-y-3" onSubmit={submit}>
-        <Field label="Ad">
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus={!plan}
-            placeholder={kind === 'loan' ? 'ör. İhtiyaç kredisi' : isCardInst ? 'ör. Telefon' : kind === 'recurring_income' ? 'ör. Maaş' : 'ör. Elektrik'} />
+    <form className="space-y-3" onSubmit={submit}>
+      <Field label="Ad">
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus={!plan}
+          placeholder={kind === 'loan' ? 'ör. İhtiyaç kredisi' : isCardInst ? 'ör. Telefon' : kind === 'recurring_income' ? 'ör. Maaş' : 'ör. Elektrik'} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={isCardInst ? 'Kart' : kind === 'recurring_income' ? 'Yatan hesap' : 'Ödeyen hesap'}>
+          <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId}
+            filter={isCardInst ? (a) => a.kind === 'credit_card' : undefined} allowEmpty={accountId ? undefined : 'Seçin'} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={isCardInst ? 'Kart' : kind === 'recurring_income' ? 'Yatan hesap' : 'Ödeyen hesap'}>
-            <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId}
-              filter={isCardInst ? (a) => a.kind === 'credit_card' : undefined} allowEmpty={accountId ? undefined : 'Seçin'} />
-          </Field>
-          <Field label="Kategori">
-            <CategorySelect categories={snap.categories} kind={catKind} value={categoryId} onChange={setCategoryId} />
-          </Field>
-        </div>
+        <Field label="Kategori">
+          <CategorySelect categories={snap.categories} kind={catKind} value={categoryId} onChange={setCategoryId} />
+        </Field>
+      </div>
 
-        {!plan && kind === 'loan' && (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Toplam taksit"><input className="input" inputMode="numeric" value={total} onChange={(e) => setTotal(e.target.value)} /></Field>
-              <Field label="Kalan taksit"><input className="input" inputMode="numeric" value={remaining} onChange={(e) => setRemaining(e.target.value)} /></Field>
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={helper} onChange={(e) => setHelper(e.target.checked)} />
-              Anapara + aylık faiz ile hesapla
-            </label>
-            {helper ? (
-              <div className="space-y-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-950/60">
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Anapara"><MoneyInput value={principal} onChange={setPrincipal} /></Field>
-                  <Field label="Aylık faiz (%)"><input className="input" inputMode="decimal" value={ratePct} onChange={(e) => setRatePct(e.target.value)} placeholder="ör. 2,99" /></Field>
-                </div>
-                <div className="text-sm">
-                  Taksit tutarı: <span className="font-semibold tabular-nums">{computed !== null ? formatMoney(computed) : '-'}</span>
-                </div>
-              </div>
-            ) : (
-              <Field label="Taksit tutarı"><MoneyInput value={installment} onChange={setInstallment} /></Field>
-            )}
-            <Field label="Sonraki ödeme tarihi"><input className="input" type="date" value={nextDue} onChange={(e) => setNextDue(e.target.value)} required /></Field>
-          </>
-        )}
-
-        {!plan && isCardInst && (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Toplam tutar"><MoneyInput value={amount} onChange={setAmount} /></Field>
-              <Field label="Taksit sayısı"><input className="input" inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value)} /></Field>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Alışveriş tarihi"><input className="input" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} required /></Field>
-              <Field label="Faturalanmış taksit"><input className="input" inputMode="numeric" value={billed} onChange={(e) => setBilled(e.target.value)} /></Field>
-            </div>
-            <div className="text-xs text-slate-500">Takibe başlamadan önce ekstreye yansımış taksit sayısı. Bunlar kartın güncel borcuna dahil kabul edilir.</div>
-          </>
-        )}
-
-        {isRecurring && (
-          <>
-            <Field label={variable ? 'Tahmini tutar' : 'Tutar'}><MoneyInput value={amount} onChange={setAmount} /></Field>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={variable} onChange={(e) => setVariable(e.target.checked)} />
-              Değişken tutar (ödemede sorulsun)
-            </label>
-            <Segmented
-              options={(Object.keys(FREQ_LABEL) as Frequency[]).map((f) => ({ value: f, label: FREQ_LABEL[f] }))}
-              value={frequency}
-              onChange={setFrequency}
-              disabled={scheduleLocked}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="İlk vade"><input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={scheduleLocked} required /></Field>
-              <Field label="Bitiş (isteğe bağlı)"><input className="input" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
-            </div>
-            {scheduleLocked && <div className="text-xs text-slate-500">Periyot ve ilk vade: Geçmiş ödemeler olduğu için değiştirilemez; planı bitirip yenisini oluşturun.</div>}
-            {!plan && startDate < today && (
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={settlePast} onChange={(e) => setSettlePast(e.target.checked)} />
-                Bugünden önceki vadeler ödenmiş sayılsın
-              </label>
-            )}
-          </>
-        )}
-
-        {plan && (
+      {!plan && kind === 'loan' && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Toplam taksit"><input className="input" inputMode="numeric" value={total} onChange={(e) => setTotal(e.target.value)} /></Field>
+            <Field label="Kalan taksit"><input className="input" inputMode="numeric" value={remaining} onChange={(e) => setRemaining(e.target.value)} /></Field>
+          </div>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-            Aktif
+            <input type="checkbox" checked={helper} onChange={(e) => setHelper(e.target.checked)} />
+            Anapara + aylık faiz ile hesapla
           </label>
-        )}
-        <FormError msg={err} />
-        <button className="btn btn-primary w-full">Kaydet</button>
-      </form>
-    </Sheet>
+          {helper ? (
+            <div className="space-y-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-950/60">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Anapara"><MoneyInput value={principal} onChange={setPrincipal} /></Field>
+                <Field label="Aylık faiz (%)"><input className="input" inputMode="decimal" value={ratePct} onChange={(e) => setRatePct(e.target.value)} placeholder="ör. 2,99" /></Field>
+              </div>
+              <div className="text-sm">
+                Taksit tutarı: <span className="font-semibold tabular-nums">{computed !== null ? formatMoney(computed) : '-'}</span>
+              </div>
+            </div>
+          ) : (
+            <Field label="Taksit tutarı"><MoneyInput value={installment} onChange={setInstallment} /></Field>
+          )}
+          <Field label="Sonraki ödeme tarihi"><input className="input" type="date" value={nextDue} onChange={(e) => setNextDue(e.target.value)} required /></Field>
+        </>
+      )}
+
+      {!plan && isCardInst && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Toplam tutar"><MoneyInput value={amount} onChange={setAmount} /></Field>
+            <Field label="Taksit sayısı"><input className="input" inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value)} /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Alışveriş tarihi"><input className="input" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} required /></Field>
+            <Field label="Faturalanmış taksit"><input className="input" inputMode="numeric" value={billed} onChange={(e) => setBilled(e.target.value)} /></Field>
+          </div>
+          <div className="text-xs text-slate-500">Takibe başlamadan önce ekstreye yansımış taksit sayısı. Bunlar kartın güncel borcuna dahil kabul edilir.</div>
+        </>
+      )}
+
+      {isRecurring && (
+        <>
+          <Field label={variable ? 'Tahmini tutar' : 'Tutar'}><MoneyInput value={amount} onChange={setAmount} /></Field>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={variable} onChange={(e) => setVariable(e.target.checked)} />
+            Değişken tutar (ödemede sorulsun)
+          </label>
+          <Segmented
+            options={(Object.keys(FREQ_LABEL) as Frequency[]).map((f) => ({ value: f, label: FREQ_LABEL[f] }))}
+            value={frequency}
+            onChange={setFrequency}
+            disabled={scheduleLocked}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="İlk vade"><input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={scheduleLocked} required /></Field>
+            <Field label="Bitiş (isteğe bağlı)"><input className="input" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
+          </div>
+          {scheduleLocked && <div className="text-xs text-slate-500">Periyot ve ilk vade: Geçmiş ödemeler olduğu için değiştirilemez; planı bitirip yenisini oluşturun.</div>}
+          {!plan && startDate < today && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={settlePast} onChange={(e) => setSettlePast(e.target.checked)} />
+              Bugünden önceki vadeler ödenmiş sayılsın
+            </label>
+          )}
+        </>
+      )}
+
+      {plan && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          Aktif
+        </label>
+      )}
+      <FormError msg={err} />
+      <button className="btn btn-primary w-full">Kaydet</button>
+    </form>
   )
 }

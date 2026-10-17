@@ -122,7 +122,7 @@ export function Segmented<T extends string>({ options, value, onChange, disabled
           type="button"
           disabled={disabled}
           onClick={() => onChange(o.value)}
-          className={`flex-1 rounded-lg px-2 py-1.5 text-sm font-medium transition ${
+          className={`flex-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-sm font-medium transition ${
             value === o.value ? 'bg-white shadow-sm dark:bg-slate-950' : 'text-slate-500 dark:text-slate-400'
           }`}
         >

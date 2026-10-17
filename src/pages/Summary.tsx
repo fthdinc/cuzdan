@@ -9,6 +9,7 @@ import { OccBadge, StmtBadge } from '../components/Status'
 import { usePay } from '../components/Pay'
 import { QuickAdd } from '../components/QuickAdd'
 import { ErrorBoundary } from '../components/ErrorBoundary'
+import { SetupChecklist } from '../components/SetupChecklist'
 import { fmtDate, monthLabel, relDay } from '../lib/format'
 
 const KIND_LABEL = { cash: 'Nakit', bank: 'Banka', credit_card: 'Kredi kartı' }
@@ -17,6 +18,7 @@ export function SummaryPage({ snap }: { snap: Snapshot }) {
   return (
     <div className="space-y-4">
       <PageHeader title="Özet" />
+      <ErrorBoundary><SetupChecklist snap={snap} /></ErrorBoundary>
       <ErrorBoundary><QuickAdd snap={snap} /></ErrorBoundary>
       <Section><MonthCards snap={snap} /></Section>
       <Section title="Yaklaşan 30 gün"><Upcoming snap={snap} /></Section>

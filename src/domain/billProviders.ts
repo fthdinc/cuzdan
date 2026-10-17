@@ -2,16 +2,27 @@
 import { fold } from './import/text'
 import type { BillType } from './types'
 
+// Key order is the display order (Faturalar groups, type grid in the form).
 export const BILL_TYPE_LABEL: Record<BillType, string> = {
+  rent: 'Kira',
+  dues: 'Aidat',
   electricity: 'Elektrik',
   water: 'Su',
   gas: 'Doğalgaz',
-  phone: 'Telefon',
   internet: 'İnternet',
+  phone: 'Telefon',
   tv: 'TV / dijital',
-  dues: 'Aidat',
   subscription: 'Abonelik',
+  insurance: 'Sigorta',
+  education: 'Eğitim',
   other: 'Diğer',
+}
+
+/** Default statement-matching keywords for a new bill of this type (before a provider is picked). */
+export const BILL_TYPE_KEYWORDS: Partial<Record<BillType, string[]>> = {
+  rent: ['kira'],
+  insurance: ['sigorta', 'kasko', 'dask'],
+  education: ['okul', 'kurs', 'öğrenim'],
 }
 
 export interface BillProvider {
@@ -84,6 +95,14 @@ export const BILL_PROVIDERS: BillProvider[] = [
   p('subscription', 'YouTube Premium', 'youtubepremium', 'youtube music', 'youtubemusic'),
   p('subscription', 'Apple', 'apple com bill', 'itunes com bill'),
   p('subscription', 'Google One', 'google storage', 'google one'),
+  // sigorta
+  p('insurance', 'Allianz', 'allianz sigorta'),
+  p('insurance', 'Axa', 'axa sigorta'),
+  p('insurance', 'Anadolu Sigorta'),
+  p('insurance', 'Mapfre', 'mapfre sigorta'),
+  p('insurance', 'HDI', 'hdi sigorta'),
+  p('insurance', 'Sompo', 'sompo sigorta', 'sompo japan'),
+  p('insurance', 'Türkiye Sigorta'),
   // aidat
   p('dues', 'Aidat', 'site yonetimi', 'apartman yonetimi', 'site aidat', 'aidat odemesi'),
 ]
@@ -102,10 +121,11 @@ export function matchesKeywords(text: string, keywords: string[]): boolean {
   })
 }
 
-/** "Enerjisa elektrik", "İSKİ su", "Netflix" (TV / subscription / dues / other: provider only). */
+/** "Enerjisa elektrik", "İSKİ su", "Netflix" (other types: provider only). */
 export function billDefaultName(type: BillType, provider: string | undefined): string {
   const label = BILL_TYPE_LABEL[type]
   if (!provider) return type === 'other' ? '' : label
+  if (type === 'rent') return `${label} (${provider})`
   if (!['electricity', 'water', 'gas', 'phone', 'internet'].includes(type) || words(provider).includes(words(label))) return provider
   return `${provider} ${label.toLocaleLowerCase('tr')}`
 }
@@ -135,14 +155,18 @@ export interface DetectedBill {
 }
 
 /**
- * Detects a bill payment in a statement description: a catalog provider first, then the generic "fatura"
- * patterns (type guessed from hints like "ELEKTRIK", keywords = the description without the generic words).
+ * Detects a bill payment in a statement description: a catalog provider first, then rent ("kira" as a whole
+ * word), insurance ("sigorta" / "kasko" / "dask"), then the generic "fatura" patterns (type guessed from hints
+ * like "ELEKTRIK", keywords = the description without the generic words).
  */
 export function detectBill(description: string): DetectedBill | null {
   const t = words(description)
   const autopay = / (talimat[a-z]*|otomatik|oto) /.test(t)
   const prov = BILL_PROVIDERS.find((pr) => matchesKeywords(description, pr.keywords))
   if (prov) return { type: prov.type, provider: prov.name, keywords: prov.keywords.map((k) => fold(k)), autopay }
+  if (/ kira /.test(t)) return { type: 'rent', keywords: ['kira'], autopay }
+  const ins = [...new Set(t.split(' ').filter((w) => /^(sigorta[a-z]*|kasko|dask)$/.test(w)).map((w) => (w.startsWith('sigorta') ? 'sigorta' : w)))]
+  if (ins.length) return { type: 'insurance', keywords: ins, autopay }
   if (!GENERIC.test(t)) return null
   const type = TYPE_HINTS.find(([, re]) => re.test(t))?.[0] ?? 'other'
   const rest = t

@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
 import {
-  BILL_PROVIDERS, BILL_TYPE_LABEL, billDefaultName, billInfo, findProvider, parseMoney, todayISO,
+  BILL_PROVIDERS, BILL_TYPE_KEYWORDS, BILL_TYPE_LABEL, billDefaultName, billInfo, findProvider, parseMoney, todayISO,
   type BillInfo, type BillType, type Frequency, type RecurringPlan, type Snapshot,
 } from '../domain'
 import { savePlan } from '../actions'
@@ -12,24 +12,28 @@ import { BillIcon } from './BillIcon'
 
 const TYPES = Object.keys(BILL_TYPE_LABEL) as BillType[]
 
-/** Create a bill (recurring_expense plan with bill info), or edit `plan`. */
-export function BillFormSheet({ snap, plan, onClose }: { snap: Snapshot; plan?: RecurringPlan; onClose: () => void }) {
+/** Create a bill (recurring_expense plan with bill info; `initialType` presets the type), or edit `plan`. */
+export function BillFormSheet({ snap, plan, initialType = 'electricity', onClose }: {
+  snap: Snapshot; plan?: RecurringPlan; initialType?: BillType; onClose: () => void
+}) {
   const today = todayISO()
   const info = plan ? billInfo(plan) : undefined
-  const [type, setType] = useState<BillType>(info?.type ?? 'electricity')
+  // New bills: rent defaults to the Kira category and a fixed amount; other types to Fatura and a variable amount.
+  const defaultCat = (t: BillType) => snap.categories.find((c) => c.kind === 'expense' && c.name === (t === 'rent' ? 'Kira' : 'Fatura'))?.id ?? ''
+  const [type, setType] = useState<BillType>(info?.type ?? initialType)
   const [provider, setProvider] = useState(info?.provider ?? '')
   const [name, setName] = useState(plan?.name ?? '')
   const [nameTouched, setNameTouched] = useState(!!plan)
   const [subscriberNo, setSubscriberNo] = useState(info?.subscriberNo ?? '')
   const [accountId, setAccountId] = useState(plan?.accountId ?? snap.accounts.find((a) => !a.archived)?.id ?? '')
-  const [categoryId, setCategoryId] = useState(plan?.categoryId ?? snap.categories.find((c) => c.kind === 'expense' && c.name === 'Fatura')?.id ?? '')
+  const [categoryId, setCategoryId] = useState(plan?.categoryId ?? defaultCat(initialType))
   const [autopay, setAutopay] = useState(info?.autopay ?? false)
-  const [variable, setVariable] = useState(plan?.variable ?? true)
+  const [variable, setVariable] = useState(plan?.variable ?? initialType !== 'rent')
   const [amount, setAmount] = useState(moneyToInput(plan?.amount))
   const [frequency, setFrequency] = useState<Frequency>(plan?.frequency ?? 'monthly')
   const [startDate, setStartDate] = useState(plan?.startDate ?? today)
   const [settlePast, setSettlePast] = useState(true)
-  const [keywords, setKeywords] = useState<string[]>(info?.matchKeywords ?? [])
+  const [keywords, setKeywords] = useState<string[]>(info?.matchKeywords ?? BILL_TYPE_KEYWORDS[initialType] ?? [])
   const [kwInput, setKwInput] = useState('')
   const [active, setActive] = useState(plan?.active ?? true)
   const [err, setErr] = useState<string | null>(null)
@@ -41,10 +45,23 @@ export function BillFormSheet({ snap, plan, onClose }: { snap: Snapshot; plan?: 
 
   const shownName = nameTouched ? name : billDefaultName(type, provider.trim() || undefined)
   const suggestions = BILL_PROVIDERS.filter((p) => p.type === type)
+  const isRent = type === 'rent'
+
+  const chooseType = (t: BillType) => {
+    setType(t)
+    if (plan) return
+    // Replace defaults of the previous type; keep what the user changed.
+    if (categoryId === defaultCat(type)) setCategoryId(defaultCat(t))
+    setVariable(t !== 'rent')
+    const prov = findProvider(provider)
+    if (prov && prov.type !== t) setProvider('')
+    const prevDefault = prov?.keywords ?? BILL_TYPE_KEYWORDS[type] ?? []
+    if (!keywords.length || keywords.join() === prevDefault.join()) setKeywords(BILL_TYPE_KEYWORDS[t] ?? [])
+  }
 
   const pickProvider = (v: string) => {
     setProvider(v)
-    const prov = findProvider(v)
+    const prov = isRent ? undefined : findProvider(v)
     if (prov) {
       setType(prov.type)
       setKeywords(prov.keywords)
@@ -87,14 +104,14 @@ export function BillFormSheet({ snap, plan, onClose }: { snap: Snapshot; plan?: 
   }
 
   return (
-    <Sheet title={plan ? 'Faturayı düzenle' : 'Fatura ekle'} onClose={onClose}>
+    <Sheet title={plan ? 'Faturayı düzenle' : 'Fatura / sabit gider ekle'} onClose={onClose}>
       <form className="space-y-3" onSubmit={submit}>
         <div>
           <span className="label">Tür</span>
           <div className="grid grid-cols-3 gap-2">
             {TYPES.map((t) => (
               <button
-                key={t} type="button" onClick={() => setType(t)}
+                key={t} type="button" onClick={() => chooseType(t)}
                 className={`flex items-center gap-2 rounded-xl border p-2 text-left text-xs font-medium transition ${
                   type === t ? 'border-indigo-500 ring-2 ring-indigo-500/20' : 'border-slate-200 dark:border-slate-700'
                 }`}
@@ -106,18 +123,21 @@ export function BillFormSheet({ snap, plan, onClose }: { snap: Snapshot; plan?: 
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Kurum">
-            <input className="input" list="bill-providers" value={provider} onChange={(e) => pickProvider(e.target.value)} placeholder="ör. Enerjisa" />
-            <datalist id="bill-providers">
-              {suggestions.map((p) => <option key={p.name} value={p.name} />)}
-            </datalist>
+          <Field label={isRent ? 'Ev sahibi / açıklama' : 'Kurum'}>
+            <input className="input" list={isRent ? undefined : 'bill-providers'} value={provider} onChange={(e) => pickProvider(e.target.value)}
+              placeholder={isRent ? 'İsteğe bağlı' : suggestions[0] ? `ör. ${suggestions[0].name}` : 'İsteğe bağlı'} />
+            {!isRent && (
+              <datalist id="bill-providers">
+                {suggestions.map((p) => <option key={p.name} value={p.name} />)}
+              </datalist>
+            )}
           </Field>
           <Field label="Abone / tesisat no">
             <input className="input" value={subscriberNo} onChange={(e) => setSubscriberNo(e.target.value)} placeholder="İsteğe bağlı" />
           </Field>
         </div>
         <Field label="Ad">
-          <input className="input" value={shownName} onChange={(e) => { setNameTouched(true); setName(e.target.value) }} placeholder="ör. Ev elektriği" />
+          <input className="input" value={shownName} onChange={(e) => { setNameTouched(true); setName(e.target.value) }} placeholder={isRent ? 'ör. Ev kirası' : 'ör. Ev elektriği'} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Ödeyen hesap / kart">

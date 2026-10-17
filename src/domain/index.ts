@@ -15,7 +15,7 @@ export { loanFromRemaining, annuityInstallment, occurrencesForPlan, loanProgress
 // --- bills (recurring_expense plans) ---
 export { billInfo, billHistory, billThisMonth, changeRatio, type BillMonth, type BillMonthState } from './bills'
 export {
-  BILL_PROVIDERS, BILL_TYPE_LABEL, detectBill, matchesKeywords, findProvider, billKeywords, billDefaultName,
+  BILL_PROVIDERS, BILL_TYPE_LABEL, BILL_TYPE_KEYWORDS, detectBill, matchesKeywords, findProvider, billKeywords, billDefaultName,
   type BillProvider, type DetectedBill,
 } from './billProviders'
 

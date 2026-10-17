@@ -116,6 +116,16 @@ describe('provider catalog', () => {
     expect(detectBill('ABC ELEKTRIK FATURASI')).toMatchObject({ type: 'electricity', keywords: ['abc elektrik'], autopay: false })
     expect(detectBill('KREDI KARTI OTOMATIK ODEME')).toBeNull()
   })
+  it('rent and insurance rows', () => {
+    expect(detectBill('EFT KIRA ODEMESI AHMET YILMAZ')).toEqual({ type: 'rent', keywords: ['kira'], autopay: false })
+    expect(detectBill('Kira Ekim 2026 OTOMATIK')).toMatchObject({ type: 'rent', autopay: true })
+    expect(detectBill('ARAC KIRALAMA HIZMETI')).toBeNull() // "kira" only as a whole word
+    expect(detectBill('ALLIANZ SIGORTA AS')).toMatchObject({ type: 'insurance', provider: 'Allianz' })
+    expect(detectBill('ANADOLU SIGORTA KASKO')).toMatchObject({ type: 'insurance', provider: 'Anadolu Sigorta' })
+    expect(detectBill('TÜRKİYE SİGORTA DASK')).toMatchObject({ type: 'insurance', provider: 'Türkiye Sigorta' })
+    expect(detectBill('XYZ SIGORTACILIK KASKO TAKSIT')).toEqual({ type: 'insurance', keywords: ['sigorta', 'kasko'], autopay: false })
+    expect(detectBill('DASK POLICE')).toMatchObject({ type: 'insurance', keywords: ['dask'] })
+  })
   it('keyword matching and plan keywords', () => {
     expect(matchesKeywords('CK BOĞAZİÇİ ELEKTRİK', ['bogazici elektrik'])).toBe(true)
     expect(matchesKeywords('SPOTIFYAB', ['spotify'])).toBe(false)
@@ -130,5 +140,8 @@ describe('provider catalog', () => {
     expect(billDefaultName('water', 'Su idaresi')).toBe('Su idaresi')
     expect(billDefaultName('tv', 'Netflix')).toBe('Netflix')
     expect(billDefaultName('gas', undefined)).toBe('Doğalgaz')
+    expect(billDefaultName('rent', undefined)).toBe('Kira')
+    expect(billDefaultName('rent', 'Ahmet Bey')).toBe('Kira (Ahmet Bey)')
+    expect(billDefaultName('insurance', 'Axa')).toBe('Axa')
   })
 })

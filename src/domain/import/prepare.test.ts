@@ -223,3 +223,28 @@ describe('bills in statement import', () => {
     expect(again.filter((r) => r.include).map((r) => r.row.description)).toEqual([])
   })
 })
+
+describe('prepareImport: rent and insurance', () => {
+  const rsnap: Snapshot = {
+    accounts: [bank], transactions: [], plans: [],
+    categories: [{ id: 'fatura', name: 'Fatura', kind: 'expense' }, { id: 'kira', name: 'Kira', kind: 'expense' }],
+  }
+  const file: ParsedStatement = {
+    meta: {},
+    rows: [
+      row('2026-09-03', 'EFT KIRA EYLUL AHMET YILMAZ', 1500000, 'debit'),
+      row('2026-10-03', 'EFT KIRA EKIM AHMET YILMAZ', 1500000, 'debit'),
+      row('2026-09-10', 'AXA SIGORTA KASKO', 120000, 'debit'),
+    ],
+  }
+  const { rows } = prepareImport(file, bank, rsnap, TODAY)
+
+  it('proposes a fixed-amount rent bill in the Kira category and follows later months', () => {
+    expect(rows[0].categoryId).toBe('kira')
+    expect(rows[0].billProposal?.plan).toMatchObject({ variable: false, categoryId: 'kira', bill: { type: 'rent', matchKeywords: ['kira'] } })
+    expect(rows[1].billFollows).toEqual({ rowId: 0, index: 1 })
+  })
+  it('proposes an insurance bill for a catalog insurer', () => {
+    expect(rows[2].billProposal?.plan).toMatchObject({ name: 'Axa', variable: true, categoryId: 'fatura', bill: { type: 'insurance', provider: 'Axa' } })
+  })
+})

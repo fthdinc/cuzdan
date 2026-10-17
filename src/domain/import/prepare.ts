@@ -210,6 +210,7 @@ export function prepareImport(parsed: ParsedStatement, account: Account, snap: S
 
   // Proposals: one new plan per detected bill (earliest row); later months of the same bill follow it.
   const fatura = snap.categories.find((c) => c.kind === 'expense' && c.name === 'Fatura')?.id
+  const kira = snap.categories.find((c) => c.kind === 'expense' && c.name === 'Kira')?.id
   const groups = new Map<string, ImportRow[]>()
   for (const [id, d] of detected) {
     const key = d.provider ?? `${d.type}|${d.keywords.join(',')}`
@@ -219,7 +220,7 @@ export function prepareImport(parsed: ParsedStatement, account: Account, snap: S
     group.sort((a, b) => (a.row.date < b.row.date ? -1 : a.row.date > b.row.date ? 1 : a.id - b.id))
     const lead = group[0]
     const d = detected.get(lead.id)!
-    lead.categoryId ??= fatura
+    lead.categoryId ??= d.type === 'rent' ? kira ?? fatura : fatura
     lead.billProposal = {
       track: true,
       plan: {
@@ -229,7 +230,7 @@ export function prepareImport(parsed: ParsedStatement, account: Account, snap: S
         categoryId: lead.categoryId,
         active: true,
         amount: lead.row.amount,
-        variable: true,
+        variable: d.type !== 'rent',
         frequency: 'monthly',
         startDate: lead.row.date,
         settledBefore: lead.row.date,

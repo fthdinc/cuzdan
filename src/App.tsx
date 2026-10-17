@@ -34,8 +34,8 @@ function Welcome() {
         Başlamak için ilk hesabını ekle: banka hesabın, nakit cüzdanın ya da kredi kartın. Güncel bakiyeyi bir kez girmen yeterli.
       </p>
       <ol className="mx-auto mt-4 max-w-xs space-y-1 text-left text-sm text-slate-600 dark:text-slate-300">
-        <li>1. Hesaplarını ekle</li>
-        <li>2. Faturalarını, kredi ve taksitlerini bir kez tanımla</li>
+        <li>1. Hesaplarını ekle (banka, nakit, kredi kartı)</li>
+        <li>2. Gelirlerini (maaş vb.), kredilerini, kira ve faturalarını bir kez tanımla; Özet'teki Kurulum listesi adım adım yol gösterir</li>
         <li>3. Harcamaları hızlı ekle çubuğuyla gir</li>
       </ol>
       <button className="btn btn-primary mt-6 w-full" onClick={() => setOpen(true)}>Hesap ekle</button>

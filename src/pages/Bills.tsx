@@ -40,7 +40,7 @@ export function BillsPage({ snap }: { snap: Snapshot }) {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Faturalar" action={<button className="btn btn-primary" onClick={() => setAdding(true)}>+ Fatura ekle</button>} />
+      <PageHeader title="Faturalar ve sabit giderler" action={<button className="btn btn-primary shrink-0" onClick={() => setAdding(true)}>+ Ekle</button>} />
       <section className="card p-4">
         <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">{monthLabel(today.slice(0, 7))} faturaları</div>
         <div className="mt-1 text-2xl font-semibold tabular-nums">{estimated && <span className="text-slate-400">≈ </span>}{formatMoney(total)}</div>
@@ -55,7 +55,7 @@ export function BillsPage({ snap }: { snap: Snapshot }) {
       </section>
 
       {bills.length === 0 ? (
-        <div className="card"><Empty>Henüz fatura yok. Elektrik, su, doğalgaz, telefon, internet, aidat ve abonelikleri buradan takip edin.</Empty></div>
+        <div className="card"><Empty>Henüz kayıt yok. Kira, aidat, elektrik, su, doğalgaz, telefon, internet, sigorta, okul ve abonelikleri buradan takip edin.</Empty></div>
       ) : TYPES.map((t) => {
         const group = bills.filter((b) => billInfo(b).type === t)
         if (!group.length) return null
