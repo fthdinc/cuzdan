@@ -80,10 +80,16 @@ describe('card payments', () => {
   it('convertToCardPayment turns an expense into a transfer to the card, keeping date, amount and note', async () => {
     await mod.db.accounts.add({ id: 'card', name: 'Axess', kind: 'credit_card', openingBalance: 0, openingDate: '2026-10-01', card: { statementDay: 5, dueDaysAfterStatement: 10 } })
     await mod.db.transactions.add({ id: 'p', date: '2026-10-12', kind: 'expense', amount: 3000000, accountId: 'b', categoryId: 'k', note: 'Axess kredi kartı', createdAt: 1 })
-    await actions.convertToCardPayment((await mod.db.transactions.get('p'))!, 'card')
+    await actions.convertToCardPayment((await mod.db.transactions.get('p'))!, 'b', 'card')
     const t = await mod.db.transactions.get('p')
     expect(t).toMatchObject({ kind: 'transfer', accountId: 'b', toAccountId: 'card', amount: 3000000, date: '2026-10-12', note: 'Axess kredi kartı' })
     expect(t?.categoryId).toBeUndefined()
+  })
+
+  it('an expense recorded on the card becomes a transfer from bank/cash to it', async () => {
+    await mod.db.transactions.add({ id: 'q', date: '2026-10-18', kind: 'expense', amount: 3000000, accountId: 'card', note: 'Axess Kredi Kartı', createdAt: 2 })
+    await actions.convertToCardPayment((await mod.db.transactions.get('q'))!, 'b', 'card')
+    expect(await mod.db.transactions.get('q')).toMatchObject({ kind: 'transfer', accountId: 'b', toAccountId: 'card' })
   })
 
   it('defaultPayMethod: method last used for the category, else last expense method, else bank/cash', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { looksLikeCardPayment, matchCard, minPaymentRate, monthSummary, suspectedCardPayments } from './index'
+import { cardPaymentTransfer, looksLikeCardPayment, matchCard, minPaymentRate, monthSummary, suspectedCardPayments } from './index'
 import type { Account, Category, Snapshot, Transaction } from './index'
 
 const bank: Account = { id: 'b', name: 'Ana hesap', kind: 'bank', openingBalance: 0, openingDate: '2000-01-01' }
@@ -46,15 +46,17 @@ describe('looksLikeCardPayment', () => {
 })
 
 describe('suspectedCardPayments', () => {
-  it('flags expenses on bank/cash that look like card payments; skips card, plan and debt tx', () => {
+  it('flags expenses that look like card payments, also when recorded on the card itself; skips plan and debt tx', () => {
     const hits = [
       tx({ categoryId: 'kk' }),
       tx({ note: 'Axess kredi kartı ödemesi', categoryId: 'm' }),
       tx({ note: 'kart ödemesi' }),
+      // Paying the card entered as an expense with the card as payment method: raises its debt instead of lowering it.
+      tx({ note: 'Axess Kredi Kartı', accountId: 'ax' }),
     ]
     const misses = [
       tx({ note: 'market' }),
-      tx({ note: 'kart ödemesi', accountId: 'ax' }), // spending on the card itself
+      tx({ note: 'market axess', accountId: 'ax' }), // real spending on the card
       tx({ note: 'kart ödemesi', occurrenceKey: 'p:0' }),
       tx({ note: 'kart ödemesi', debtId: 'd' }),
       tx({ kind: 'transfer', toAccountId: 'ax', note: 'Axess ödemesi' }),
@@ -63,6 +65,21 @@ describe('suspectedCardPayments', () => {
   })
   it('works without any card account', () => {
     expect(suspectedCardPayments(snapOf([tx({ categoryId: 'kk' })], [bank]))).toHaveLength(1)
+  })
+})
+
+describe('cardPaymentTransfer', () => {
+  it('expense on bank/cash -> transfer from it to the named card (else first card)', () => {
+    const snap = snapOf([])
+    expect(cardPaymentTransfer(tx({ note: 'Bonus ödemesi' }), snap)).toEqual({ accountId: 'b', toAccountId: 'bo' })
+    expect(cardPaymentTransfer(tx({ note: 'kart ödemesi' }), snap)).toEqual({ accountId: 'b', toAccountId: 'ax' })
+  })
+  it('expense recorded on the card -> transfer from the first bank/cash account to that card', () => {
+    expect(cardPaymentTransfer(tx({ note: 'Axess Kredi Kartı', accountId: 'ax' }), snapOf([]))).toEqual({ accountId: 'b', toAccountId: 'ax' })
+  })
+  it('no possible source or target -> undefined', () => {
+    expect(cardPaymentTransfer(tx({ note: 'kart ödemesi' }), snapOf([], [bank]))).toBeUndefined()
+    expect(cardPaymentTransfer(tx({ note: 'kart ödemesi', accountId: 'ax' }), snapOf([], [axess]))).toBeUndefined()
   })
 })
 

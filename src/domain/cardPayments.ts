@@ -31,12 +31,24 @@ export function looksLikeCardPayment(text: string, categoryId: ID | undefined, s
 }
 
 /**
- * Expense tx on a bank/cash account that look like card payments (looksLikeCardPayment on note + category).
- * Counting them as expense double counts the card's spending. Plan (occurrenceKey) and debt-linked tx are skipped.
+ * Expense tx that look like card payments (looksLikeCardPayment on note + category), on bank/cash or on the card itself
+ * (card chosen as payment method: that raises the card's debt instead of lowering it). Counting them as expense double
+ * counts the card's spending. Plan (occurrenceKey) and debt-linked tx are skipped.
  */
 export function suspectedCardPayments(snap: Snapshot): Transaction[] {
-  const isCard = new Set(snap.accounts.filter((a) => a.kind === 'credit_card').map((a) => a.id))
   return snap.transactions.filter((t) =>
-    t.kind === 'expense' && !t.occurrenceKey && !t.debtId && !isCard.has(t.accountId) &&
-    looksLikeCardPayment(t.note ?? '', t.categoryId, snap))
+    t.kind === 'expense' && !t.occurrenceKey && !t.debtId && looksLikeCardPayment(t.note ?? '', t.categoryId, snap))
+}
+
+/**
+ * Transfer accounts for turning a suspected card payment into a card payment. Expense on bank/cash: from it to the card
+ * named in the note (else the first card). Expense on a card: from the first bank/cash account to that card.
+ */
+export function cardPaymentTransfer(tx: Transaction, snap: Snapshot): { accountId: ID; toAccountId: ID } | undefined {
+  const active = snap.accounts.filter((a) => !a.archived)
+  const cards = active.filter((a) => a.kind === 'credit_card')
+  const onCard = cards.find((c) => c.id === tx.accountId)
+  const from = onCard ? active.find((a) => a.kind !== 'credit_card')?.id : tx.accountId
+  const to = onCard ?? matchCard(tx.note ?? '', cards) ?? cards[0]
+  return from && to ? { accountId: from, toAccountId: to.id } : undefined
 }

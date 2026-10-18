@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { matchCard, suspectedCardPayments, todayISO, type ID, type Snapshot, type Transaction } from '../domain'
+import { cardPaymentTransfer, suspectedCardPayments, todayISO, type ID, type Snapshot, type Transaction } from '../domain'
 import { convertToCardPayment } from '../actions'
 import { fmtDate } from '../lib/format'
 import { activeAccounts } from '../lib/accounts'
@@ -43,16 +43,17 @@ export function CardPaymentNotice({ snap }: { snap: Snapshot }) {
 
 function SuspectRow({ t, snap, onKeep }: { t: Transaction; snap: Snapshot; onKeep: () => void }) {
   const cards = activeAccounts(snap.accounts, (a) => a.kind === 'credit_card')
-  const [cardId, setCardId] = useState<ID>(() => (matchCard(t.note ?? '', cards) ?? cards[0])?.id ?? '')
+  const transfer = cardPaymentTransfer(t, snap)
+  const [cardId, setCardId] = useState<ID>(() => transfer?.toAccountId ?? '')
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
   const target = cards.find((c) => c.id === cardId)
   const cat = snap.categories.find((c) => c.id === t.categoryId)
   const acc = snap.accounts.find((a) => a.id === t.accountId)
   const convert = async () => {
-    if (!target || busy) return
+    if (!target || !transfer || busy) return
     setBusy(true)
-    try { await convertToCardPayment(t, target.id) } finally { setBusy(false) }
+    try { await convertToCardPayment(t, transfer.accountId, target.id) } finally { setBusy(false) }
   }
   return (
     <li className="space-y-2 py-3">

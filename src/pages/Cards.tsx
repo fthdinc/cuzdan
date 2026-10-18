@@ -59,7 +59,7 @@ function CardOverview({ card, snap }: { card: Account; snap: Snapshot }) {
         </div>
         <div className="text-right">
           <div className="text-xs text-slate-500">Güncel borç</div>
-          <Amount value={-debt} tone={debt > 0 ? 'expense' : 'neutral'} className="text-xl font-semibold" />
+          <Amount value={debt} tone={debt > 0 ? 'expense' : 'neutral'} className="text-xl font-semibold" />
         </div>
       </div>
       {limit > 0 && <div>
@@ -73,7 +73,7 @@ function CardOverview({ card, snap }: { card: Account; snap: Snapshot }) {
         <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/60">
           <div className="flex justify-between text-sm">
             <span className="text-slate-500">Gelecek taksitler</span>
-            <Amount value={-future} tone="expense" className="font-medium" />
+            <Amount value={future} tone="expense" className="font-medium" />
           </div>
           <ul className="mt-2 space-y-1">
             {withProgress.map(({ p, pr }) => (

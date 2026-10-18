@@ -107,8 +107,8 @@ export async function payOccurrence(plan: Plan, occ: Occurrence, amount: Kurus, 
 }
 
 /** Turns an expense that was really a card payment into a transfer from its account to the card (date, amount, note kept). */
-export async function convertToCardPayment(tx: Transaction, cardId: ID): Promise<void> {
-  await updateTx({ ...tx, kind: 'transfer', toAccountId: cardId, categoryId: undefined })
+export async function convertToCardPayment(tx: Transaction, fromAccountId: ID, cardId: ID): Promise<void> {
+  await updateTx({ ...tx, kind: 'transfer', accountId: fromAccountId, toAccountId: cardId, categoryId: undefined })
 }
 
 /** Card statement payment = transfer from a bank/cash account to the card. */
