@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  accountBalance, cardFutureInstallments, cardStatements, formatMoney, minPaymentRate, todayISO,
+  accountBalance, cardFutureInstallments, cardStatements, daysBetween, formatMoney, minPaymentRate, nextCardDates, todayISO,
   type Account, type Snapshot,
 } from '../domain'
 import { Amount, Empty, PageHeader, ProgressBar, Section } from '../components/ui'
@@ -9,6 +9,8 @@ import { StmtBadge } from '../components/Status'
 import { usePay } from '../components/Pay'
 import { fmtDate } from '../lib/format'
 import { installmentProgress } from '../lib/plans'
+import { buildIcs, downloadIcs } from '../lib/ics'
+import { readReminderSettings } from '../lib/reminders'
 
 export function CardsPage({ snap }: { snap: Snapshot }) {
   const cards = snap.accounts.filter((a) => a.kind === 'credit_card' && !a.archived)
@@ -34,6 +36,8 @@ function CardOverview({ card, snap }: { card: Account; snap: Snapshot }) {
   const usage = limit ? (debt + future) / limit : 0
   const plans = snap.plans.flatMap((p) => (p.kind === 'card_installment' && p.accountId === card.id ? [p] : []))
   const withProgress = plans.map((p) => ({ p, pr: installmentProgress(p, snap, today) })).filter((x) => x.pr.remainingCount > 0)
+  const next = nextCardDates(card, snap, today)
+  const left = (d: string) => { const n = daysBetween(today, d); return n === 0 ? 'bugün' : n === 1 ? 'yarın' : `${n} gün` }
 
   return (
     <div className="space-y-3">
@@ -43,7 +47,15 @@ function CardOverview({ card, snap }: { card: Account; snap: Snapshot }) {
           <div className="text-xs text-slate-500">
             Kesim her ayın {card.card?.statementDay}. günü · son ödeme {card.card?.dueDaysAfterStatement} gün sonra · asgari %{Math.round(minPaymentRate(card) * 100)}
           </div>
-          <Link to={`/ice-aktar?hesap=${card.id}`} className="btn btn-soft btn-sm mt-2">Ekstre içe aktar</Link>
+          {next && (
+            <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              Sonraki kesim: {fmtDate(next.kesim, today)} ({left(next.kesim)}) · Son ödeme: {fmtDate(next.due, today)}
+            </div>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={`/ice-aktar?hesap=${card.id}`} className="btn btn-soft btn-sm">Ekstre içe aktar</Link>
+            <button className="btn btn-soft btn-sm" onClick={() => downloadIcs(buildIcs(snap, today, readReminderSettings(), { cardId: card.id }), 'cuzdan-kart-hatirlatma.ics')}>Takvime ekle</button>
+          </div>
         </div>
         <div className="text-right">
           <div className="text-xs text-slate-500">Güncel borç</div>

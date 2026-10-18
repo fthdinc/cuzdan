@@ -9,6 +9,8 @@ import { parseSigned, sortCategories } from '../lib/format'
 import { AccountFormSheet } from '../components/AccountForm'
 import { AccountSelect, Amount, CategoryDot, Empty, Field, FormError, MoneyInput, PageHeader, Section, Segmented, Sheet } from '../components/ui'
 import { activeAccounts, isLiquid, needsAccountPicker } from '../lib/accounts'
+import { readReminderSettings, saveReminderSettings } from '../lib/reminders'
+import { buildIcs, downloadIcs } from '../lib/ics'
 
 const KIND_LABEL = { cash: 'Nakit', bank: 'Banka', credit_card: 'Kredi kartı' }
 
@@ -19,6 +21,7 @@ export function SettingsPage({ snap }: { snap: Snapshot }) {
       <Section title="Hesaplar"><Accounts snap={snap} /></Section>
       {snap.accounts.some((a) => !a.archived) && <Section title="Bakiye düzelt"><Adjust snap={snap} /></Section>}
       <Section title="Kategoriler"><Categories snap={snap} /></Section>
+      <Section title="Hatırlatmalar"><ReminderSettingsForm snap={snap} /></Section>
       <Section title="Yedek"><Backup /></Section>
     </div>
   )
@@ -183,6 +186,35 @@ function CategorySheet({ kind, category, onClose }: { kind: 'expense' | 'income'
         <button className="btn btn-primary w-full">Kaydet</button>
       </form>
     </Sheet>
+  )
+}
+
+/** Reminder windows (per device) and the calendar export that reminds while the app is closed. */
+function ReminderSettingsForm({ snap }: { snap: Snapshot }) {
+  const [settings, setSettings] = useState(readReminderSettings)
+  const set = (key: 'kesimDaysBefore' | 'dueDaysBefore', v: string) => {
+    const n = Math.max(0, Math.min(30, Math.trunc(Number(v)) || 0))
+    const next = { ...settings, [key]: n }
+    setSettings(next)
+    saveReminderSettings(next)
+  }
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Kart kesiminden kaç gün önce">
+          <input className="input" type="number" inputMode="numeric" min={0} max={30} value={settings.kesimDaysBefore} onChange={(e) => set('kesimDaysBefore', e.target.value)} />
+        </Field>
+        <Field label="Son ödemeden kaç gün önce">
+          <input className="input" type="number" inputMode="numeric" min={0} max={30} value={settings.dueDaysBefore} onChange={(e) => set('dueDaysBefore', e.target.value)} />
+        </Field>
+      </div>
+      <p className="text-sm text-slate-500">
+        Telefonunun takvimine ekle; Cüzdan kapalıyken de bildirim alırsın. Kart veya fatura ekleyince dosyayı yeniden indir.
+      </p>
+      <button className="btn btn-primary" onClick={() => downloadIcs(buildIcs(snap, todayISO(), settings), 'cuzdan-hatirlatmalar.ics')}>
+        Takvime ekle (.ics indir)
+      </button>
+    </div>
   )
 }
 

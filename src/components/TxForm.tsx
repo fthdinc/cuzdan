@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { looksLikeCardPayment, matchCard, suggestCategory, todayISO, type ID, type Snapshot, type Transaction, type TxKind } from '../domain'
-import { addTx, defaultPayMethod, deleteTx, lastAccountId, updateTx, type TxDraft } from '../actions'
-import { moneyToInput, parseSigned } from '../lib/format'
+import { BILL_TYPE_LABEL, looksLikeCardPayment, matchCard, matchExpenseToBill, suggestCategory, todayISO, type ID, type Snapshot, type Transaction, type TxKind } from '../domain'
+import { addExpenseForBill, addTx, defaultPayMethod, deleteTx, lastAccountId, updateTx, type TxDraft } from '../actions'
+import { monthName, moneyToInput, parseSigned } from '../lib/format'
 import { AccountSelect, CategorySelect, Field, FormError, MoneyInput, Segmented, Sheet } from './ui'
 import { activeAccounts, isLiquid, needsAccountPicker, pickAccount } from '../lib/accounts'
 import { PayMethodChips } from './PayMethod'
@@ -43,6 +43,9 @@ export function TxFormSheet({ snap, tx, cardPayment, onClose }: { snap: Snapshot
   const [date, setDate] = useState(tx?.date ?? todayISO())
   const [note, setNote] = useState(tx?.note ?? '')
   const [addingCard, setAddingCard] = useState(false)
+  // Faturalar: settle the matched bill occurrence (link) / start tracking a monthly bill (track; null = default).
+  const [link, setLink] = useState(true)
+  const [track, setTrack] = useState<boolean | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const openingDate = snap.accounts.find((a) => a.id === accountId)?.openingDate
   // Income goes to bank/cash, a card payment comes from bank/cash. With a single choice the income picker is hidden.
@@ -50,6 +53,11 @@ export function TxFormSheet({ snap, tx, cardPayment, onClose }: { snap: Snapshot
   const showAccount = kind === 'transfer' || needsAccountPicker(snap.accounts, accFilter)
   const catKind = kind === 'income' || kind === 'expense' ? kind : null
   const looksLikePayment = kind === 'expense' && looksLikeCardPayment(note, categoryId || undefined, snap)
+  // New expenses only: an edited expense keeps whatever it settles.
+  const billMatch = !tx && kind === 'expense' && !cardMode && !looksLikePayment
+    ? matchExpenseToBill({ note, categoryId: categoryId || undefined, date, accountId }, snap, todayISO())
+    : null
+  const tracking = track ?? (billMatch?.kind === 'propose' && billMatch.strong)
 
   const toCardMode = (text: string) => {
     setKind('transfer')
@@ -96,6 +104,8 @@ export function TxFormSheet({ snap, tx, cardPayment, onClose }: { snap: Snapshot
     const accId = keepOwn ? accountId : pickAccount(snap.accounts, accountId, accFilter)
     if (!accId) return setErr('Hesap seçin')
     if (cardMode && !toAccountId) return setErr('Önce kartını ekle')
+    const tracked = !tx && kind === 'expense' && !cardMode && tracking && billMatch?.kind !== 'link' && billMatch?.kind !== 'already_paid'
+    if (tracked && !note.trim()) return setErr('Takip için açıklama girin (ör. Spotify)')
     if (kind === 'transfer' && (!toAccountId || toAccountId === accId)) return setErr('Farklı bir hedef hesap seçin')
     const draft: TxDraft = {
       date,
@@ -111,6 +121,7 @@ export function TxFormSheet({ snap, tx, cardPayment, onClose }: { snap: Snapshot
       debtId: kind === 'income' || kind === 'expense' ? tx?.debtId : undefined,
     }
     if (tx) await updateTx({ ...draft, id: tx.id, createdAt: tx.createdAt })
+    else if (kind === 'expense' && !cardMode) await addExpenseForBill(draft, billMatch, { link, track: tracked, accounts: snap.accounts, categories: snap.categories })
     else await addTx(draft)
     onClose()
   }
@@ -190,6 +201,30 @@ export function TxFormSheet({ snap, tx, cardPayment, onClose }: { snap: Snapshot
         >
           <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </Field>
+        {!tx && kind === 'expense' && !cardMode && !looksLikePayment && (
+          billMatch?.kind === 'link' ? (
+            <label className="flex items-start gap-2 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <input type="checkbox" className="mt-0.5" checked={link} onChange={(e) => setLink(e.target.checked)} />
+              <span>Faturalar: {billMatch.planName} ({monthName(billMatch.dueDate)}) ödendi olarak işaretlenecek</span>
+            </label>
+          ) : billMatch?.kind === 'already_paid' ? (
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Faturalar: {billMatch.planName} ({monthName(billMatch.dueDate)}) zaten ödendi; bu ayrı bir gider olarak kaydedilir.
+            </div>
+          ) : (
+            <div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={tracking} onChange={(e) => setTrack(e.target.checked)} />
+                {billMatch ? "Faturalar'da her ay takip et" : 'Her ay tekrarlanıyor'}
+              </label>
+              {tracking && (
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Faturalar'a {BILL_TYPE_LABEL[billMatch?.type ?? 'other']} olarak eklenir; sonraki aylar tahmini tutarla beklenen gider olarak görünür.
+                </div>
+              )}
+            </div>
+          )
+        )}
         {looksLikePayment && !snap.accounts.find((a) => a.id === accountId && isCardAcc(a)) && (
           <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
             Bu bir kart ödemesi gibi görünüyor. Kart ödemesi gider sayılırsa kartla yaptığın harcamalar iki kez sayılır.

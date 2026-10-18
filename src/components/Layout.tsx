@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { AppBadge } from './Reminders'
 
 const icon = (d: string) => (
   <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -18,6 +19,7 @@ const NAV = [
 export function Layout() {
   return (
     <div className="min-h-dvh md:flex">
+      <AppBadge />
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-slate-200 bg-white px-3 py-6 dark:border-slate-800 dark:bg-slate-900 md:flex">
         <div className="mb-8 flex items-center gap-2 px-3">
           <span className="grid h-8 w-8 place-items-center rounded-xl bg-indigo-600 text-sm font-bold text-white">₺</span>

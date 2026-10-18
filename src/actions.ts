@@ -1,6 +1,6 @@
 // All DB writes the UI performs.
 import { db, newId } from './db'
-import { debtPaymentKind, monthlyIncomePlan, todayISO, type Account, type ID, type ISODate, type Kurus, type Occurrence, type PersonalDebt, type Plan, type Transaction } from './domain'
+import { billCategoryId, debtPaymentKind, expenseBillPlan, monthlyIncomePlan, todayISO, type Account, type Category, type ExpenseBillMatch, type ID, type ISODate, type Kurus, type Occurrence, type PersonalDebt, type Plan, type RecurringPlan, type Transaction } from './domain'
 import type { BuiltImport } from './domain/import'
 
 export type TxDraft = Omit<Transaction, 'id' | 'createdAt'>
@@ -28,6 +28,56 @@ export async function addIncome(input: {
       occurrenceKey = r.occurrenceKey
     }
     await addTx({ date: input.date, kind: 'income', amount: input.amount, accountId: input.accountId, categoryId: input.categoryId, note: input.note, occurrenceKey })
+  })
+}
+
+/**
+ * Expense that starts tracking a bill (Faturalar): adds the plan and the expense settling its first occurrence. Atomic.
+ */
+export async function addExpenseWithBill(draft: TxDraft, plan: RecurringPlan): Promise<void> {
+  await db.transaction('rw', db.transactions, db.plans, async () => {
+    await db.plans.add(clean(plan))
+    await addTx({ ...draft, occurrenceKey: `${plan.id}:0` })
+  })
+}
+
+/**
+ * New expense with its Faturalar effect (match = matchExpenseToBill of the draft). link: a 'link' match settles that
+ * occurrence. track: creates a monthly bill from the expense ('propose' match: its type / provider, else type 'other',
+ * named after the note), paid by card = autopay.
+ */
+export async function addExpenseForBill(draft: TxDraft, match: ExpenseBillMatch | null, o: {
+  link: boolean; track: boolean; accounts: Account[]; categories: Category[]
+}): Promise<void> {
+  if (match?.kind === 'link') {
+    await addTx(o.link ? { ...draft, occurrenceKey: `${match.planId}:${match.occurrenceIndex}` } : draft)
+    return
+  }
+  if (!o.track || match?.kind === 'already_paid') {
+    await addTx(draft)
+    return
+  }
+  const type = match?.type ?? 'other'
+  await addExpenseWithBill(draft, expenseBillPlan({
+    id: newId(), createdAt: Date.now(), name: match?.name ?? (draft.note ?? '').trim().slice(0, 40), type, provider: match?.provider,
+    keywords: match?.keywords ?? [], amount: draft.amount, date: draft.date, accountId: draft.accountId,
+    categoryId: draft.categoryId ?? billCategoryId(type, o.categories),
+    autopay: o.accounts.some((a) => a.id === draft.accountId && a.kind === 'credit_card'),
+  }))
+}
+
+/**
+ * "Takibe al" on past expenses: adds the new bill plan (if any) and sets occurrenceKey on the expenses. An expense that
+ * meanwhile settles something, or an occurrence already settled by another expense, is left alone. Atomic.
+ */
+export async function applyBillSuggestion(built: { plan?: RecurringPlan; links: { txId: ID; occurrenceKey: string }[] }): Promise<void> {
+  await db.transaction('rw', db.transactions, db.plans, async () => {
+    if (built.plan) await db.plans.add(clean(built.plan))
+    for (const l of built.links) {
+      const tx = await db.transactions.get(l.txId)
+      if (!tx || tx.occurrenceKey || await db.transactions.where('occurrenceKey').equals(l.occurrenceKey).count()) continue
+      await db.transactions.update(l.txId, { occurrenceKey: l.occurrenceKey })
+    }
   })
 }
 
@@ -197,6 +247,13 @@ export function defaultPayMethod(accounts: Account[], categoryId?: ID): ID | und
   const byCat = categoryId ? readPayByCat()[categoryId] : undefined
   return [byCat, last].map((id) => active.find((a) => a.id === id)?.id).find(Boolean)
     ?? (active.find((a) => a.kind !== 'credit_card') ?? active[0])?.id
+}
+
+/** Default payment account of a new bill: last used for its category, else the first bank/cash (never a card by default). */
+export function billPayMethod(accounts: Account[], categoryId?: ID): ID | undefined {
+  const active = accounts.filter((a) => !a.archived)
+  const byCat = categoryId ? readPayByCat()[categoryId] : undefined
+  return active.find((a) => a.id === byCat)?.id ?? (active.find((a) => a.kind !== 'credit_card') ?? active[0])?.id
 }
 
 /** Drop undefined / empty-string optional fields so stored objects stay tidy. */

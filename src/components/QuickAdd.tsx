@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react'
-import { formatMoney, looksLikeCardPayment, matchCard, parseQuickEntry, todayISO, type ID, type Snapshot } from '../domain'
-import { addTx, defaultPayMethod, lastAccountId } from '../actions'
-import { relDay } from '../lib/format'
+import { useState, type FormEvent, type ReactNode } from 'react'
+import { formatMoney, looksLikeCardPayment, matchCard, matchExpenseToBill, parseQuickEntry, todayISO, type ID, type Snapshot } from '../domain'
+import { addExpenseForBill, addTx, defaultPayMethod, lastAccountId } from '../actions'
+import { monthName, relDay } from '../lib/format'
 import { activeAccounts, isLiquid, payMethodLabel, pickAccount } from '../lib/accounts'
 import { PayMethodChips } from './PayMethod'
 import { AccountFormSheet } from './AccountForm'
@@ -16,6 +16,9 @@ export function QuickAdd({ snap }: { snap: Snapshot }) {
   const [text, setText] = useState('')
   const [picked, setPicked] = useState<ID | null>(null)
   const [addingCard, setAddingCard] = useState(false)
+  // Faturalar: settle the matched bill occurrence / start tracking a monthly bill (null = default).
+  const [link, setLink] = useState(true)
+  const [track, setTrack] = useState<boolean | null>(null)
   const entry = text.trim() ? parseQuickEntry(text, snap.categories, today) : null
   const cat = entry?.categoryId ? snap.categories.find((c) => c.id === entry.categoryId) : undefined
   const accounts = activeAccounts(snap.accounts)
@@ -31,6 +34,11 @@ export function QuickAdd({ snap }: { snap: Snapshot }) {
   const account = accounts.find((a) => a.id === accountId)
   const liquidCount = accounts.filter(isLiquid).length
   const showChips = income || payCard ? liquidCount > 1 : true
+  const billMatch = entry && !income && !payCard && entry.note
+    ? matchExpenseToBill({ note: entry.note, categoryId: entry.categoryId, date: entry.date, accountId }, snap, today)
+    : null
+  const tracking = track ?? (billMatch?.kind === 'propose' && billMatch.strong)
+  const canTrack = !!entry?.note && billMatch?.kind !== 'link' && billMatch?.kind !== 'already_paid'
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -38,9 +46,14 @@ export function QuickAdd({ snap }: { snap: Snapshot }) {
     // Clear before the async write so text typed meanwhile is not wiped afterwards.
     setText('')
     setPicked(null)
-    await addTx(payCard
-      ? { date: entry.date, kind: 'transfer', amount: entry.amount, accountId, toAccountId: payCard.id, note: entry.note || undefined }
-      : { date: entry.date, kind: entry.kind, amount: entry.amount, accountId, categoryId: entry.categoryId, note: entry.note || undefined })
+    setLink(true)
+    setTrack(null)
+    if (payCard) await addTx({ date: entry.date, kind: 'transfer', amount: entry.amount, accountId, toAccountId: payCard.id, note: entry.note || undefined })
+    else {
+      const draft = { date: entry.date, kind: entry.kind, amount: entry.amount, accountId, categoryId: entry.categoryId, note: entry.note || undefined }
+      if (income) await addTx(draft)
+      else await addExpenseForBill(draft, billMatch, { link, track: canTrack && tracking, accounts: snap.accounts, categories: snap.categories })
+    }
   }
 
   const method = account && (account.kind === 'credit_card' || liquidCount > 1) ? payMethodLabel(account, snap.accounts) : null
@@ -85,6 +98,15 @@ export function QuickAdd({ snap }: { snap: Snapshot }) {
           ) : text.trim() ? (
             <span className="text-xs text-slate-400">Tutar bulunamadı</span>
           ) : null}
+          {billMatch?.kind === 'link' ? (
+            <Toggle on={link} onClick={() => setLink(!link)} title="Faturalar'da bu ayı ödendi işaretle">
+              ✓ {billMatch.planName} ({monthName(billMatch.dueDate)})
+            </Toggle>
+          ) : billMatch?.kind === 'already_paid' ? (
+            <span className="text-xs text-slate-400">{billMatch.planName} ({monthName(billMatch.dueDate)}) zaten ödendi</span>
+          ) : entry && !income && !payCard && canTrack ? (
+            <Toggle on={tracking} onClick={() => setTrack(!tracking)} title="Faturalar'da her ay takip et">↻ Her ay takip</Toggle>
+          ) : null}
         </div>
         {payCard && <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Kart ödemesi gider sayılmaz; harcamalar karta girildiğinde sayılır.</div>}
         {entry && account && entry.date < account.openingDate && (
@@ -94,5 +116,19 @@ export function QuickAdd({ snap }: { snap: Snapshot }) {
       {/* Outside the form: the card form is a form of its own. */}
       {addingCard && <AccountFormSheet quickCard onSaved={setPicked} onClose={() => setAddingCard(false)} />}
     </>
+  )
+}
+
+function Toggle({ on, onClick, title, children }: { on: boolean; onClick: () => void; title: string; children: ReactNode }) {
+  return (
+    <button
+      type="button" aria-pressed={on} title={title} onClick={onClick}
+      className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+        on ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+        : 'border border-dashed border-slate-300 text-slate-500 dark:border-slate-600 dark:text-slate-400'
+      }`}
+    >
+      {children}
+    </button>
   )
 }

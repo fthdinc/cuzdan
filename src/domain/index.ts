@@ -18,6 +18,11 @@ export {
   BILL_PROVIDERS, BILL_TYPE_LABEL, BILL_TYPE_KEYWORDS, detectBill, matchesKeywords, findProvider, billKeywords, billDefaultName,
   type BillProvider, type DetectedBill,
 } from './billProviders'
+// matchExpenseToBill: links a manual expense to a bill occurrence, or proposes a new bill; billSuggestions: the same over past expenses.
+export {
+  matchExpenseToBill, detectExpenseBill, expenseBillPlan, billCategoryId, billSuggestions, buildBillSuggestion,
+  type ExpenseBill, type ExpenseBillMatch, type ExpenseLike, type BillSuggestion,
+} from './billMatch'
 
 // --- cards ---
 export { cardStatements, accountBalance, cardFutureInstallments, minPaymentRate, installmentSchedule } from './cards'
@@ -36,3 +41,9 @@ export { balanceForecast, type BalanceForecast, type ForecastDay } from './forec
 export { parseQuickEntry } from './quickEntry'
 // suggestCategory: category for a free-text description (income/expense "Açıklama").
 export { suggestCategory } from './categoryMatch'
+
+// --- reminders ---
+// reminders: what needs attention today (card kesim/due, plan and debt due dates), sorted by urgency. Ids are stable per period.
+export { reminders, nextCardDates, daysBetween, DEFAULT_REMINDER_SETTINGS } from './reminders'
+// dateInMonth(monthIndex, day) clamps day to month end; monthIndex('2026-10-18') = 2026*12+9. Used by the calendar export.
+export { dateInMonth, monthIndex } from './dates'

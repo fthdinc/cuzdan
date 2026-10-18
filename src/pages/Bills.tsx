@@ -9,6 +9,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary'
 import { OccBadge } from '../components/Status'
 import { BillIcon } from '../components/BillIcon'
 import { BillFormSheet } from '../components/BillForm'
+import { BillSuggestions } from '../components/BillSuggestions'
 import { usePay, type PayTarget } from '../components/Pay'
 import { fmtDate, monthLabel } from '../lib/format'
 
@@ -40,7 +41,7 @@ export function BillsPage({ snap }: { snap: Snapshot }) {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Faturalar ve sabit giderler" action={<button className="btn btn-primary shrink-0" onClick={() => setAdding(true)}>+ Ekle</button>} />
+      <PageHeader title="Faturalar ve düzenli giderler" action={<button className="btn btn-primary shrink-0" onClick={() => setAdding(true)}>+ Ekle</button>} />
       <section className="card p-4">
         <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">{monthLabel(today.slice(0, 7))} faturaları</div>
         <div className="mt-1 text-2xl font-semibold tabular-nums">{estimated && <span className="text-slate-400">≈ </span>}{formatMoney(total)}</div>
@@ -54,8 +55,10 @@ export function BillsPage({ snap }: { snap: Snapshot }) {
         </div>
       </section>
 
+      <BillSuggestions snap={snap} />
+
       {bills.length === 0 ? (
-        <div className="card"><Empty>Henüz kayıt yok. Kira, aidat, elektrik, su, doğalgaz, telefon, internet, sigorta, okul ve abonelikleri buradan takip edin.</Empty></div>
+        <div className="card"><Empty>Henüz kayıt yok. Gider girerken elektrik, su, doğalgaz, telefon, abonelik ve ulaşım (Akbil, İstanbulkart) ödemelerin otomatik olarak buraya gelir. Kira, aidat, sigorta ve okulu + Ekle ile ekleyebilirsin.</Empty></div>
       ) : TYPES.map((t) => {
         const group = bills.filter((b) => billInfo(b).type === t)
         if (!group.length) return null

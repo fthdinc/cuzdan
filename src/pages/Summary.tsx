@@ -15,6 +15,7 @@ import { IncomeFormSheet } from '../components/IncomeForm'
 import { TxFormSheet } from '../components/TxForm'
 import { CardPaymentNotice } from '../components/CardPaymentReview'
 import { CardIcon } from '../components/PayMethod'
+import { RemindersCard } from '../components/Reminders'
 import { fmtDate, formatMoneyShort, monthLabel, percentSuffix, relDay } from '../lib/format'
 
 const KIND_LABEL = { cash: 'Nakit', bank: 'Banka', credit_card: 'Kredi kartı' }
@@ -26,6 +27,7 @@ export function SummaryPage({ snap }: { snap: Snapshot }) {
   return (
     <div className="space-y-4">
       <PageHeader title="Özet" />
+      <ErrorBoundary><RemindersCard snap={snap} /></ErrorBoundary>
       <ErrorBoundary><SetupChecklist snap={snap} /></ErrorBoundary>
       <ErrorBoundary><CardPaymentNotice snap={snap} /></ErrorBoundary>
       <Section><MonthCard snap={snap} /></Section>

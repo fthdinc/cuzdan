@@ -13,6 +13,7 @@ export const BILL_TYPE_LABEL: Record<BillType, string> = {
   phone: 'Telefon',
   tv: 'TV / dijital',
   subscription: 'Abonelik',
+  transport: 'Ulaşım',
   insurance: 'Sigorta',
   education: 'Eğitim',
   other: 'Diğer',
@@ -23,6 +24,7 @@ export const BILL_TYPE_KEYWORDS: Partial<Record<BillType, string[]>> = {
   rent: ['kira'],
   insurance: ['sigorta', 'kasko', 'dask'],
   education: ['okul', 'kurs', 'öğrenim'],
+  transport: ['akbil', 'istanbulkart', 'ankarakart', 'izmirim', 'kentkart', 'hgs', 'ogs', 'otopark aboneliği', 'toplu taşıma', 'metro kart'],
 }
 
 export interface BillProvider {
@@ -86,15 +88,18 @@ export const BILL_PROVIDERS: BillProvider[] = [
   p('tv', 'D-Smart', 'd smart', 'dsmart'),
   p('tv', 'Tivibu'),
   p('tv', 'Netflix', 'netflix com'),
-  p('tv', 'Disney+', 'disney plus', 'disneyplus'),
+  p('tv', 'Disney+', 'disney', 'disney plus', 'disneyplus'),
   p('tv', 'Amazon Prime', 'prime video', 'amazon prime video'),
   p('tv', 'Exxen'),
-  p('tv', 'BluTV', 'blu tv'),
+  p('tv', 'BluTV', 'blu tv', 'max abonelik', 'max uyelik'),
   p('tv', 'HBO Max', 'hbomax'),
   p('subscription', 'Spotify'),
   p('subscription', 'YouTube Premium', 'youtubepremium', 'youtube music', 'youtubemusic'),
   p('subscription', 'Apple', 'apple com bill', 'itunes com bill'),
   p('subscription', 'Google One', 'google storage', 'google one'),
+  p('subscription', 'iCloud', 'apple icloud', 'icloud depolama'),
+  p('subscription', 'Claude', 'claude ai', 'anthropic'),
+  p('subscription', 'ChatGPT', 'chatgpt plus', 'openai'),
   // sigorta
   p('insurance', 'Allianz', 'allianz sigorta'),
   p('insurance', 'Axa', 'axa sigorta'),
@@ -108,7 +113,7 @@ export const BILL_PROVIDERS: BillProvider[] = [
 ]
 
 /** Folded, punctuation -> space, padded with spaces: " enerjisa istanbul ". */
-function words(s: string): string {
+export function words(s: string): string {
   return ` ${fold(s).split(/[^a-z0-9]+/).filter(Boolean).join(' ')} `
 }
 

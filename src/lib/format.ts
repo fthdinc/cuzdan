@@ -31,6 +31,11 @@ export function monthLabel(month: string): string {
   return `${MONTHS[m - 1]} ${y}`
 }
 
+/** '2026-10-05' -> 'Ekim' */
+export function monthName(d: ISODate): string {
+  return MONTHS[Number(d.slice(5, 7)) - 1]
+}
+
 /** '2026-10', +1 -> '2026-11' */
 export function shiftMonth(month: string, n: number): string {
   const [y, m] = month.split('-').map(Number)

@@ -1,9 +1,9 @@
 // Matching parsed statement rows against the app's data. Pure.
 import { billDefaultName, billKeywords, detectBill, matchesKeywords, type DetectedBill } from '../billProviders'
+import { dayDiff, pickBillOccurrence } from '../billMatch'
 import { accountBalance, cardStatements } from '../cards'
-import { addDays, dateInMonth, monthIndex, ymd } from '../dates'
-import { occurrencesForPlan } from '../plans'
-import type { Account, CardInstallmentPlan, ID, ISODate, Kurus, Occurrence, RecurringPlan, Snapshot, Transaction } from '../types'
+import { dateInMonth, monthIndex } from '../dates'
+import type { Account, CardInstallmentPlan, ID, ISODate, Kurus, RecurringPlan, Snapshot, Transaction } from '../types'
 import { suggestCategory } from './category'
 import type { ParsedRow, ParsedStatement, StatementMeta } from './statement'
 import { fold } from './text'
@@ -54,12 +54,6 @@ export interface PrepareOptions {
   paymentSourceId?: ID // card import: credit rows that look like payments become transfers from this account
 }
 
-const DAY = 86400000
-const dayDiff = (a: ISODate, b: ISODate) => {
-  const [y1, m1, d1] = ymd(a)
-  const [y2, m2, d2] = ymd(b)
-  return Math.round((Date.UTC(y1, m1 - 1, d1) - Date.UTC(y2, m2 - 1, d2)) / DAY)
-}
 const firstKesimMi = (day: number, date: ISODate) => {
   const mi = monthIndex(date)
   return dateInMonth(mi, day) < date ? mi + 1 : mi
@@ -74,8 +68,6 @@ function effect(t: Transaction, accountId: ID): number | null {
 }
 
 const PAYMENT = /odeme|tahsilat|havale|eft|fast/
-const BILL_WINDOW = 20 // days between a bill's due date and the statement row
-const unpaid = (o: Occurrence) => o.status === 'pending' || o.status === 'overdue' || o.status === 'autopay_pending'
 const NOT_PAYMENT = /iade|iptal/
 
 /**
@@ -122,27 +114,15 @@ export function prepareImport(parsed: ParsedStatement, account: Account, snap: S
       if (d) detected.set(out.id, d)
       return
     }
-    const digits = row.description.replace(/\D/g, '')
-    let best: { plan: RecurringPlan; o: Occurrence; score: number } | undefined
-    let paid: RecurringPlan | undefined
-    for (const { plan } of candidates) {
-      const sub = plan.bill?.subscriberNo?.replace(/\D/g, '')
-      const subMatch = !!sub && digits.includes(sub)
-      for (const o of occurrencesForPlan(plan, snap, today, addDays(row.date, BILL_WINDOW))) {
-        const d = Math.abs(dayDiff(o.dueDate, row.date))
-        if (d > BILL_WINDOW) continue
-        if (o.status === 'paid') paid ??= plan
-        if (!unpaid(o) || claimed.has(o.key)) continue
-        const score = d - (subMatch ? 1000 : 0)
-        if (!best || score < best.score) best = { plan, o, score }
-      }
-    }
-    if (best) {
-      claimed.add(best.o.key)
-      out.bill = { planId: best.plan.id, planName: best.plan.name, occurrenceKey: best.o.key }
-      out.categoryId = best.plan.categoryId ?? out.categoryId
-    } else if (paid) {
-      out.bill = { planId: paid.id, planName: paid.name }
+    const pick = pickBillOccurrence(candidates.map((x) => x.plan), row.date, snap, today, { claimed, digits: row.description.replace(/\D/g, '') })
+    if (!pick) return
+    const { plan, occurrence } = pick
+    if (occurrence.status !== 'paid') {
+      claimed.add(occurrence.key)
+      out.bill = { planId: plan.id, planName: plan.name, occurrenceKey: occurrence.key }
+      out.categoryId = plan.categoryId ?? out.categoryId
+    } else {
+      out.bill = { planId: plan.id, planName: plan.name }
       out.duplicate = 'existing'
     }
   }

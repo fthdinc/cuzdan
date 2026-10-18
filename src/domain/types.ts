@@ -110,7 +110,7 @@ export interface CardInstallmentPlan extends PlanBase {
 }
 
 export type BillType =
-  | 'rent' | 'dues' | 'electricity' | 'water' | 'gas' | 'internet' | 'phone' | 'tv' | 'subscription' | 'insurance' | 'education' | 'other'
+  | 'rent' | 'dues' | 'electricity' | 'water' | 'gas' | 'internet' | 'phone' | 'tv' | 'subscription' | 'transport' | 'insurance' | 'education' | 'other'
 
 /** Extra info on a recurring_expense plan managed as a bill (Faturalar). Plans without it count as type 'other', no autopay. */
 export interface BillInfo {
@@ -209,4 +209,31 @@ export interface QuickEntry {
   date: ISODate
   categoryId?: ID
   note: string
+}
+
+// --- reminders (hatırlatmalar) ---
+export type ReminderKind =
+  | 'kesim_soon' | 'kesim_passed' | 'due_soon' | 'due_overdue' // credit card statements
+  | 'payment_soon' | 'payment_overdue' | 'amount_needed' | 'income_expected' // plans and personal debts
+export type ReminderSeverity = 'danger' | 'warning' | 'info'
+
+export interface ReminderSettings {
+  kesimDaysBefore: number // remind this many days before a card's kesim
+  dueDaysBefore: number // remind this many days before a due date (card, loan, bill, debt)
+}
+
+export type ReminderTarget =
+  | { type: 'statement'; card: Account; statement: CardStatement }
+  | { type: 'occurrence'; plan: Plan; occurrence: Occurrence }
+  | { type: 'debt'; debt: PersonalDebt }
+
+export interface Reminder {
+  id: string // stable per item and period, e.g. `due_soon:${cardId}:${periodEnd}`; used for dismissal
+  kind: ReminderKind
+  severity: ReminderSeverity
+  date: ISODate // the date the reminder is about (kesim, due date)
+  title: string
+  detail?: string
+  amount?: Kurus
+  target: ReminderTarget
 }

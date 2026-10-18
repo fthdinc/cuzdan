@@ -1,9 +1,9 @@
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
 import {
-  BILL_PROVIDERS, BILL_TYPE_KEYWORDS, BILL_TYPE_LABEL, billDefaultName, billInfo, findProvider, parseMoney, todayISO,
+  BILL_PROVIDERS, BILL_TYPE_KEYWORDS, BILL_TYPE_LABEL, billCategoryId, billDefaultName, billInfo, findProvider, parseMoney, todayISO,
   type BillInfo, type BillType, type Frequency, type RecurringPlan, type Snapshot,
 } from '../domain'
-import { savePlan } from '../actions'
+import { billPayMethod, savePlan } from '../actions'
 import { newId } from '../db'
 import { moneyToInput } from '../lib/format'
 import { FREQ_LABEL } from '../lib/plans'
@@ -20,18 +20,15 @@ export function BillFormSheet({ snap, plan, initialType = 'electricity', onClose
 }) {
   const today = todayISO()
   const info = plan ? billInfo(plan) : undefined
-  // New bills: rent defaults to the Kira category and a fixed amount; other types to Fatura and a variable amount.
-  const defaultCat = (t: BillType) => snap.categories.find((c) => c.kind === 'expense' && c.name === (t === 'rent' ? 'Kira' : 'Fatura'))?.id ?? ''
+  // New bills: rent defaults to the Kira category and a fixed amount, transport to Ulaşım; others to Fatura and a variable amount.
+  const defaultCat = (t: BillType) => billCategoryId(t, snap.categories) ?? ''
   const [type, setType] = useState<BillType>(info?.type ?? initialType)
   const [provider, setProvider] = useState(info?.provider ?? '')
   const [name, setName] = useState(plan?.name ?? '')
   const [nameTouched, setNameTouched] = useState(!!plan)
   const [subscriberNo, setSubscriberNo] = useState(info?.subscriberNo ?? '')
-  // Rent is paid from a bank/cash account (not a card) by default; other bills from the first active account.
-  const defaultAccount = (t: BillType) => {
-    const active = snap.accounts.filter((a) => !a.archived)
-    return ((t === 'rent' ? active.find((a) => a.kind !== 'credit_card') : undefined) ?? active[0])?.id ?? ''
-  }
+  // Paid from bank/cash by default; a card only when it was last used for the type's category.
+  const defaultAccount = (t: BillType) => billPayMethod(snap.accounts, defaultCat(t) || undefined) ?? ''
   const [accountId, setAccountId] = useState(plan?.accountId ?? defaultAccount(initialType))
   const [categoryId, setCategoryId] = useState(plan?.categoryId ?? defaultCat(initialType))
   const [autopay, setAutopay] = useState(info?.autopay ?? false)
