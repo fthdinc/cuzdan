@@ -11,6 +11,7 @@ const isOpen = (status: string) => status === 'pending' || status === 'overdue' 
 /**
  * income/expense: tx dated in the month (transfers, adjustments and debt-linked tx (debtId) excluded); expense also includes
  * card installment parts billed in statements whose kesim is in the month (category = plan.categoryId).
+ * cardExpense: the part of expense made on credit cards. Card payments are transfers, never expense.
  * projectedIncome/Expense: pending/overdue/autopay_pending occurrences due in the month (variable bills at their estimate). Card statements are not added:
  * card expense tx and billed installment parts are already counted in expense.
  * byCategory: expenses grouped by categoryId (null = uncategorized), sorted by amount desc.
@@ -23,22 +24,25 @@ export function monthSummary(snap: Snapshot, month: string, today: ISODate): Mon
 
   let income = 0
   let expense = 0
+  let cardExpense = 0
+  const isCard = new Set(cards(snap).map((a) => a.id))
   const byCat = new Map<ID | null, Kurus>()
-  const addExpense = (categoryId: ID | undefined, amount: Kurus) => {
+  const addExpense = (categoryId: ID | undefined, amount: Kurus, onCard: boolean) => {
     expense += amount
+    if (onCard) cardExpense += amount
     const k = categoryId ?? null
     byCat.set(k, (byCat.get(k) ?? 0) + amount)
   }
   for (const t of snap.transactions) {
     if (!inMonth(t.date) || t.debtId) continue
     if (t.kind === 'income') income += t.amount
-    else if (t.kind === 'expense') addExpense(t.categoryId, t.amount)
+    else if (t.kind === 'expense') addExpense(t.categoryId, t.amount, isCard.has(t.accountId))
   }
 
   let projectedIncome = 0
   let projectedExpense = 0
   for (const card of cards(snap)) {
-    for (const p of billedParts(card, snap)) if (inMonth(p.kesim)) addExpense(p.categoryId, p.amount)
+    for (const p of billedParts(card, snap)) if (inMonth(p.kesim)) addExpense(p.categoryId, p.amount, true)
   }
   for (const plan of snap.plans) {
     for (const o of occurrencesForPlan(plan, snap, today, end)) {
@@ -49,7 +53,7 @@ export function monthSummary(snap: Snapshot, month: string, today: ISODate): Mon
   }
 
   return {
-    month, income, expense, net: income - expense, projectedIncome, projectedExpense,
+    month, income, expense, cardExpense, net: income - expense, projectedIncome, projectedExpense,
     byCategory: [...byCat].map(([categoryId, amount]) => ({ categoryId, amount })).sort((a, b) => b.amount - a.amount),
   }
 }

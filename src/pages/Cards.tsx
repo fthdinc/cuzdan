@@ -50,13 +50,13 @@ function CardOverview({ card, snap }: { card: Account; snap: Snapshot }) {
           <Amount value={-debt} tone={debt > 0 ? 'expense' : 'neutral'} className="text-xl font-semibold" />
         </div>
       </div>
-      <div>
+      {limit > 0 && <div>
         <ProgressBar value={usage} tone={usage > 0.9 ? 'red' : usage > 0.7 ? 'amber' : 'brand'} />
         <div className="mt-1.5 flex justify-between text-xs text-slate-500 tabular-nums">
           <span>Limit kullanımı %{Math.round(usage * 100)}</span>
           <span>Kullanılabilir {formatMoney(Math.max(0, limit - debt - future))} / {formatMoney(limit)}</span>
         </div>
-      </div>
+      </div>}
       {future > 0 && (
         <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/60">
           <div className="flex justify-between text-sm">

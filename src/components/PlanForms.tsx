@@ -9,6 +9,7 @@ import { moneyToInput } from '../lib/format'
 import { FREQ_LABEL } from '../lib/plans'
 import { AccountSelect, CategorySelect, Field, FormError, MoneyInput, Segmented, Sheet } from './ui'
 import { isLiquid, needsAccountPicker } from '../lib/accounts'
+import { PayMethodChips } from './PayMethod'
 
 const TITLES: Record<PlanKind, string> = {
   loan: 'Kredi',
@@ -42,7 +43,8 @@ export function PlanForm({ snap, kind, plan, onDone: onClose }: {
   const cards = snap.accounts.filter((a) => a.kind === 'credit_card' && !a.archived)
   // Income is received into bank/cash; card installments need a card. Picker hidden when there is one choice.
   const accFilter = isCardInst ? (a: Account) => a.kind === 'credit_card' : kind === 'recurring_income' ? isLiquid : undefined
-  const showAccount = isCardInst || needsAccountPicker(snap.accounts, accFilter)
+  // Recurring expenses pick the payer with "Ödeme yöntemi" chips instead.
+  const showAccount = kind !== 'recurring_expense' && (isCardInst || needsAccountPicker(snap.accounts, accFilter))
   const defaultCat = kind === 'loan' ? snap.categories.find((c) => c.name === 'Kredi')?.id
     : kind === 'recurring_income' ? snap.categories.find((c) => c.name === 'Maaş')?.id
     : kind === 'recurring_expense' ? snap.categories.find((c) => c.name === 'Fatura')?.id
@@ -152,6 +154,12 @@ export function PlanForm({ snap, kind, plan, onDone: onClose }: {
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus={!plan}
           placeholder={kind === 'loan' ? 'ör. İhtiyaç kredisi' : isCardInst ? 'ör. Telefon' : kind === 'recurring_income' ? 'ör. Maaş' : 'ör. Elektrik'} />
       </Field>
+      {kind === 'recurring_expense' && (
+        <div>
+          <span className="label">Ödeme yöntemi</span>
+          <PayMethodChips accounts={snap.accounts} value={accountId} onChange={setAccountId} />
+        </div>
+      )}
       <div className={showAccount ? 'grid grid-cols-2 gap-3' : ''}>
         {showAccount && (
           <Field label={isCardInst ? 'Kart' : kind === 'recurring_income' ? 'Yatan hesap' : 'Ödeyen hesap'}>

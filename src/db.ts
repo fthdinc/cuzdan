@@ -153,7 +153,7 @@ export function validateBackup(data: unknown): Snapshot {
     }
   }
   const s = d as unknown as Snapshot
-  if (s.accounts.some((a) => !isNum(a.openingBalance) || !optNum(a.overdraftLimit) || (a.card !== undefined && !isNum(a.card.limit)))) bad('hesap tutarı sayı değil')
+  if (s.accounts.some((a) => !isNum(a.openingBalance) || !optNum(a.overdraftLimit) || (a.card !== undefined && !optNum(a.card.limit)))) bad('hesap tutarı sayı değil')
   if (s.transactions.some((t) => !isNum(t.amount))) bad('işlem tutarı sayı değil')
   if (s.plans.some((p) =>
     p.kind === 'loan' ? !isNum(p.installmentAmount) || !optNum(p.principal)

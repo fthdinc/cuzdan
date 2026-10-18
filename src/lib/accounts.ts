@@ -18,3 +18,8 @@ export const isLiquid = (a: Account) => a.kind !== 'credit_card'
 export function needsAccountPicker(accounts: Account[], filter?: (a: Account) => boolean): boolean {
   return activeAccounts(accounts, filter).length > 1
 }
+
+/** Payment method label: the only bank/cash account is "Nakit / banka"; cards and other accounts by name. */
+export function payMethodLabel(a: Account, accounts: Account[]): string {
+  return isLiquid(a) && activeAccounts(accounts, isLiquid).length === 1 ? 'Nakit / banka' : a.name
+}

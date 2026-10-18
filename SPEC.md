@@ -70,3 +70,14 @@ kendi ana sekmesinde ("Faturalar") yönetilir. Veri modeli olarak `recurring_exp
 
 ## Kapsam dışı (sonraki sürümler)
 - Bulut senkron, çoklu kullanıcı, faiz hesabı, bütçe hedefleri, bildirimler.
+
+## Ödeme yöntemi ve kart ödemesi (v1.3)
+- Gider girerken "Ödeme yöntemi" seçilir: nakit/banka hesapları veya kredi kartları (çipler, "+ Kart ekle" ile hızlı kart).
+  Varsayılan: bu kategoride son kullanılan yöntem, yoksa son gider yöntemi, yoksa nakit/banka. Hızlı eklemede metinde kart adı
+  geçerse ("120 market axess") o kart seçilir. Kartla yapılan harcama yapıldığı ay gider sayılır.
+- Kart ödemesi gider değil, banka/nakitten karta transferdir. Kategori "Kredi kartı" ya da açıklama kart ödemesine benziyorsa
+  ("kart ödemesi", "kredi kartı", "ekstre ödemesi", kart adı + ödeme/borç/ekstre/kart) form "Kart ödemesi" moduna geçer.
+- Gider olarak girilmiş kart ödemeleri (banka/nakit hesabında, plan/borç işlemi olmayan) Özet'te uyarılır; "Kart ödemesine çevir"
+  aynı tarih/tutar/notla transfere çevirir, "Gider olarak kalsın" uyarıyı o işlem için kapatır.
+- Özet: Harcanan altında "Kartla / Nakit-banka" dağılımı; kart borcu varsa Toplam bakiye altında gösterilir. Kart limiti opsiyoneldir
+  (bilinmiyorsa asgari oran %20).

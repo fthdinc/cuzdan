@@ -13,22 +13,26 @@ import { SetupChecklist } from '../components/SetupChecklist'
 import { ForecastCard } from '../components/ForecastCard'
 import { IncomeFormSheet } from '../components/IncomeForm'
 import { TxFormSheet } from '../components/TxForm'
+import { CardPaymentNotice } from '../components/CardPaymentReview'
+import { CardIcon } from '../components/PayMethod'
 import { fmtDate, formatMoneyShort, monthLabel, percentSuffix, relDay } from '../lib/format'
 
 const KIND_LABEL = { cash: 'Nakit', bank: 'Banka', credit_card: 'Kredi kartı' }
 
 export function SummaryPage({ snap }: { snap: Snapshot }) {
-  const [sheet, setSheet] = useState<'income' | 'expense' | null>(null)
+  const [sheet, setSheet] = useState<'income' | 'expense' | 'cardPayment' | null>(null)
   // Only the default account: the account list adds nothing beyond "Toplam bakiye".
   const showAccounts = snap.accounts.filter((a) => !a.archived).length > 1
   return (
     <div className="space-y-4">
       <PageHeader title="Özet" />
       <ErrorBoundary><SetupChecklist snap={snap} /></ErrorBoundary>
+      <ErrorBoundary><CardPaymentNotice snap={snap} /></ErrorBoundary>
       <Section><MonthCard snap={snap} /></Section>
       <div className="grid grid-cols-2 gap-2">
         <button className="btn btn-pay py-3 text-base" onClick={() => setSheet('income')}>+ Gelir ekle</button>
         <button className="btn bg-rose-600 py-3 text-base text-white hover:bg-rose-500" onClick={() => setSheet('expense')}>− Gider ekle</button>
+        <button className="btn btn-soft col-span-2" onClick={() => setSheet('cardPayment')}><CardIcon className="h-4 w-4" /> Kart ödemesi</button>
       </div>
       <ErrorBoundary><QuickAdd snap={snap} /></ErrorBoundary>
       <Section title="Bakiye gidişatı"><ForecastCard snap={snap} /></Section>
@@ -39,6 +43,7 @@ export function SummaryPage({ snap }: { snap: Snapshot }) {
       </div>
       {sheet === 'income' && <IncomeFormSheet snap={snap} onClose={() => setSheet(null)} />}
       {sheet === 'expense' && <TxFormSheet snap={snap} onClose={() => setSheet(null)} />}
+      {sheet === 'cardPayment' && <TxFormSheet snap={snap} cardPayment onClose={() => setSheet(null)} />}
     </div>
   )
 }
@@ -60,12 +65,15 @@ function MonthCard({ snap }: { snap: Snapshot }) {
   const pct = ratio === null ? 0 : Math.round(ratio * 100)
   const { balance, overdraftLimit } = liquidBalance(snap, today)
   const used = Math.max(0, -balance)
+  const cardDebt = debtSummary(snap, today).cardsCurrent
   return (
     <div>
       <div className="mb-3 text-sm font-semibold text-slate-500 dark:text-slate-400">{monthLabel(m.month)}</div>
       <div className="grid gap-2 sm:grid-cols-3">
         <Stat label="Bu ay gelir" value={<Amount value={m.income} tone="income" />} />
-        <Stat label="Harcanan" value={<Amount value={m.expense} tone="expense" />} />
+        <Stat label="Harcanan" value={<Amount value={m.expense} tone="expense" />} sub={m.cardExpense > 0 ? (
+          <>Kartla: {formatMoneyShort(m.cardExpense)} · Nakit/banka: {formatMoneyShort(m.expense - m.cardExpense)}</>
+        ) : undefined} />
         <Stat label="Kalan" value={<Amount value={m.net} tone={m.net < 0 ? 'expense' : 'income'} />} />
       </div>
       <div className="mt-3">
@@ -95,18 +103,26 @@ function MonthCard({ snap }: { snap: Snapshot }) {
             </div>
           </div>
         ) : <div className="mt-0.5 text-xs text-rose-600 dark:text-rose-400">Eksi bakiye (borç)</div>)}
+        {cardDebt > 0 && (
+          <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            Kart borcu: <Amount value={cardDebt} tone="expense" /> (ekstre ödenince bakiyeden düşer)
+          </div>
+        )}
         <div className="mt-0.5 text-[11px] text-slate-400">Önceki aylardan devreden dahil, banka + nakit</div>
       </div>
     </div>
   )
 }
 
-function Stat({ label, value }: { label: string; value: ReactNode }) {
+function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
     // Phone: one row per figure (amounts stay unclipped); wider screens: three tiles.
-    <div className="flex items-baseline justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-950/60 sm:block sm:p-3">
-      <div className="text-sm text-slate-500 dark:text-slate-400 sm:text-xs">{label}</div>
-      <div className="text-xl font-semibold sm:mt-1">{value}</div>
+    <div className="rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-950/60 sm:p-3">
+      <div className="flex items-baseline justify-between gap-2 sm:block">
+        <div className="text-sm text-slate-500 dark:text-slate-400 sm:text-xs">{label}</div>
+        <div className="text-xl font-semibold sm:mt-1">{value}</div>
+      </div>
+      {sub && <div className="mt-0.5 text-[11px] tabular-nums text-slate-500 dark:text-slate-400">{sub}</div>}
     </div>
   )
 }

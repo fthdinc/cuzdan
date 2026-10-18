@@ -22,6 +22,9 @@ export {
 // --- cards ---
 export { cardStatements, accountBalance, cardFutureInstallments, minPaymentRate, installmentSchedule } from './cards'
 
+// --- card payments (a card payment is a transfer, not an expense) ---
+export { matchCard, looksLikeCardPayment, suspectedCardPayments } from './cardPayments'
+
 // --- summaries ---
 export { monthSummary, upcoming, debtSummary } from './summaries'
 

@@ -52,7 +52,7 @@ function Accounts({ snap }: { snap: Snapshot }) {
                 <div className="truncate text-sm font-medium">{a.name}</div>
                 <div className="text-xs text-slate-400">
                   {KIND_LABEL[a.kind]}
-                  {a.card && ` · limit ${formatMoney(a.card.limit)} · kesim ${a.card.statementDay}`}
+                  {a.card && `${a.card.limit ? ` · limit ${formatMoney(a.card.limit)}` : ''} · kesim ${a.card.statementDay}`}
                   {a.overdraftLimit ? ` · KMH ${formatMoney(a.overdraftLimit)}` : ''}
                   {a.archived && ' · arşivde'}
                 </div>

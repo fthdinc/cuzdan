@@ -6,10 +6,10 @@ export type Kurus = number
 export type AccountKind = 'cash' | 'bank' | 'credit_card'
 
 export interface CardSettings {
-  limit: Kurus
+  limit?: Kurus // optional: unknown limit
   statementDay: number // kesim günü, 1-31 (ay sonuna kırpılır)
   dueDaysAfterStatement: number // son ödeme = kesim + N gün (TR genelde 10)
-  minPaymentRate?: number // 0-1, verilmezse limit < 50.000 TL ise 0.2, değilse 0.4
+  minPaymentRate?: number // 0-1, verilmezse limit < 50.000 TL (veya bilinmiyorsa) 0.2, değilse 0.4
 }
 
 export interface Account {
@@ -182,6 +182,7 @@ export interface MonthSummary {
   month: string // 'YYYY-MM'
   income: Kurus
   expense: Kurus // expense tx + card installment parts billed in this month's statements
+  cardExpense: Kurus // part of expense made on credit cards (card expense tx + billed installment parts)
   net: Kurus
   projectedIncome: Kurus // pending recurring_income occurrences in month
   projectedExpense: Kurus // pending/overdue/autopay_pending loan + recurring_expense occurrences due in month (card spending is already in expense)

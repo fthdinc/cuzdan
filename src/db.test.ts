@@ -75,3 +75,38 @@ describe('backup', () => {
     expect((await mod.exportBackup()).debts).toEqual(debts)
   })
 })
+
+describe('card payments', () => {
+  it('convertToCardPayment turns an expense into a transfer to the card, keeping date, amount and note', async () => {
+    await mod.db.accounts.add({ id: 'card', name: 'Axess', kind: 'credit_card', openingBalance: 0, openingDate: '2026-10-01', card: { statementDay: 5, dueDaysAfterStatement: 10 } })
+    await mod.db.transactions.add({ id: 'p', date: '2026-10-12', kind: 'expense', amount: 3000000, accountId: 'b', categoryId: 'k', note: 'Axess kredi kartı', createdAt: 1 })
+    await actions.convertToCardPayment((await mod.db.transactions.get('p'))!, 'card')
+    const t = await mod.db.transactions.get('p')
+    expect(t).toMatchObject({ kind: 'transfer', accountId: 'b', toAccountId: 'card', amount: 3000000, date: '2026-10-12', note: 'Axess kredi kartı' })
+    expect(t?.categoryId).toBeUndefined()
+  })
+
+  it('defaultPayMethod: method last used for the category, else last expense method, else bank/cash', async () => {
+    const store = new Map<string, string>()
+    const prev = globalThis.localStorage
+    globalThis.localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) } as Storage
+    try {
+      // Earlier backup tests replaced the DB: make sure the bank account exists.
+      await mod.db.accounts.put({ id: 'b', name: 'Banka', kind: 'bank', openingBalance: 0, openingDate: '2026-10-01' })
+      const accounts = await mod.db.accounts.toArray()
+      expect(actions.defaultPayMethod(accounts, 'food')).toBe('b')
+      await actions.addTx({ date: '2026-10-13', kind: 'expense', amount: 100, accountId: 'card', categoryId: 'food' })
+      await actions.addTx({ date: '2026-10-13', kind: 'expense', amount: 100, accountId: 'b', categoryId: 'market' })
+      expect(actions.defaultPayMethod(accounts, 'food')).toBe('card')
+      expect(actions.defaultPayMethod(accounts, 'other')).toBe('b')
+      expect(actions.defaultPayMethod(accounts)).toBe('b')
+    } finally {
+      globalThis.localStorage = prev
+    }
+  })
+
+  it('backup accepts a card without a limit', () => {
+    const acc = { id: 'c', name: 'K', kind: 'credit_card', openingBalance: 0, openingDate: '2026-10-01', card: { statementDay: 5, dueDaysAfterStatement: 10 } }
+    expect(() => mod.validateBackup({ accounts: [acc], transactions: [], plans: [], categories: [] })).not.toThrow()
+  })
+})

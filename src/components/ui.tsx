@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { formatMoney, type Account, type Category, type Kurus } from '../domain'
 import { ErrorBoundary } from './ErrorBoundary'
 import { sortCategories } from '../lib/format'
@@ -135,12 +135,22 @@ export function Segmented<T extends string>({ options, value, onChange, disabled
 }
 
 /** Bottom sheet on mobile, centered dialog on desktop. */
+// Open sheets, innermost last: Escape closes only the top one (a sheet may open another, e.g. "Kart ekle").
+const openSheets: object[] = []
+
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const close = useRef(onClose)
+  useEffect(() => { close.current = onClose })
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const me = {}
+    openSheets.push(me)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && openSheets.at(-1) === me) close.current() }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    return () => {
+      openSheets.splice(openSheets.indexOf(me), 1)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [])
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 backdrop-blur-sm md:items-center" onClick={onClose}>
       <div

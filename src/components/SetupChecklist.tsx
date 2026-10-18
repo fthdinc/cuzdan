@@ -35,6 +35,7 @@ export function SetupChecklist({ snap }: { snap: Snapshot }) {
   // optional: shown, but not needed for completion / progress (accounts are optional, a default one exists).
   const steps: { id: StepId; label: string; sub: string; done: boolean; action: string; optional?: boolean }[] = [
     { id: 'income', label: 'Gelirlerini ekle', sub: 'Maaş, kira geliri vb. Her ay gelenleri "Her ay tekrarlanıyor" ile işaretle', done: hasIncome, action: 'Gelir ekle' },
+    { id: 'accounts', label: 'Kredi kartlarını ekle', sub: 'Kartla yaptığın harcamaları karta işle; kart ödemesi gider sayılmaz.', done: accounts.some((a) => a.kind === 'credit_card'), action: 'Kart ekle', optional: true },
     { id: 'loans', label: 'Krediler', sub: 'İhtiyaç, konut, taşıt kredisi', done: has('loan'), action: 'Ekle' },
     { id: 'fixed', label: 'Kira ve sabit giderler', sub: 'Kira, aidat, sigorta, okul', done: bills.some((p) => p.kind === 'recurring_expense' && FIXED.includes(billInfo(p).type)), action: 'Ekle' },
     { id: 'bills', label: 'Faturalar', sub: 'Elektrik, su, doğalgaz, internet, telefon', done: bills.some((p) => p.kind === 'recurring_expense' && !FIXED.includes(billInfo(p).type)), action: 'Ekle' },
@@ -42,7 +43,6 @@ export function SetupChecklist({ snap }: { snap: Snapshot }) {
       ? [{ id: 'installments' as const, label: 'Kartla taksitli alışverişler', sub: 'Devam eden taksitler', done: has('card_installment'), action: 'Ekle' }]
       : []),
     { id: 'debts', label: 'Elden borç / alacak', sub: 'Arkadaş, aile: aldığın veya verdiğin borçlar', done: (snap.debts?.length ?? 0) > 0, action: 'Ekle' },
-    { id: 'accounts', label: 'Banka hesapları ve kredi kartları (opsiyonel)', sub: 'Birden fazla hesabı veya kartı ayrı takip etmek için', done: accounts.length > 1, action: 'Ekle', optional: true },
   ]
   const required = steps.filter((s) => !s.optional)
   const status = (s: (typeof steps)[number]): Status => (s.done ? 'done' : skipped.includes(s.id) ? 'skipped' : 'todo')
@@ -63,7 +63,7 @@ export function SetupChecklist({ snap }: { snap: Snapshot }) {
   const progress = `${resolved}/${required.length} tamamlandı`
 
   let sheet: ReactNode = null
-  if (open === 'accounts') sheet = <AccountFormSheet onClose={close} />
+  if (open === 'accounts') sheet = <AccountFormSheet quickCard onClose={close} />
   else if (open === 'income') sheet = <IncomeFormSheet snap={snap} onClose={close} />
   else if (open === 'loans') sheet = <PlanFormSheet snap={snap} kind="loan" onClose={close} />
   else if (open === 'installments') sheet = <PlanFormSheet snap={snap} kind="card_installment" onClose={close} />
@@ -105,7 +105,7 @@ export function SetupChecklist({ snap }: { snap: Snapshot }) {
               <StatusDot status={st} />
               <div className="min-w-0 flex-1">
                 <div className={`text-sm font-medium ${st === 'skipped' ? 'text-slate-400' : ''}`}>{s.label}</div>
-                <div className="truncate text-xs text-slate-400">{st === 'skipped' ? 'Yok olarak işaretlendi' : s.sub}</div>
+                <div className="line-clamp-2 text-xs text-slate-400">{st === 'skipped' ? 'Yok olarak işaretlendi' : s.sub}</div>
               </div>
               {st === 'todo' && !s.optional && <button className="btn btn-ghost btn-sm" onClick={() => skip(s.id)}>Yok</button>}
               <button className={`btn btn-sm ${st === 'todo' && !s.optional ? 'btn-primary' : 'btn-soft'}`} onClick={() => setOpen(s.id)}>{s.action}</button>

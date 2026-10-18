@@ -9,6 +9,7 @@ export async function addTx(draft: TxDraft): Promise<ID> {
   const id = newId()
   await db.transactions.add({ ...clean(draft), id, createdAt: Date.now() })
   rememberAccount(draft.accountId)
+  if (draft.kind === 'expense' && !draft.debtId) rememberPayMethod(draft.accountId, draft.categoryId)
   return id
 }
 
@@ -53,6 +54,11 @@ export async function payOccurrence(plan: Plan, occ: Occurrence, amount: Kurus, 
     })
     return true
   })
+}
+
+/** Turns an expense that was really a card payment into a transfer from its account to the card (date, amount, note kept). */
+export async function convertToCardPayment(tx: Transaction, cardId: ID): Promise<void> {
+  await updateTx({ ...tx, kind: 'transfer', toAccountId: cardId, categoryId: undefined })
 }
 
 /** Card statement payment = transfer from a bank/cash account to the card. */
@@ -169,6 +175,28 @@ export function lastAccountId(accounts: Account[]): ID | undefined {
   try { id = localStorage.getItem(LAST_ACC) } catch { /* ignore */ }
   const active = accounts.filter((a) => !a.archived)
   return active.find((a) => a.id === id)?.id ?? active[0]?.id
+}
+
+// Ödeme yöntemi: the account (bank/cash or card) last used for expenses, overall and per category.
+const LAST_PAY = 'cuzdan.lastPayMethod'
+const PAY_BY_CAT = 'cuzdan.payMethodByCategory'
+function readPayByCat(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(PAY_BY_CAT) ?? '{}') as Record<string, string> } catch { return {} }
+}
+export function rememberPayMethod(accountId: ID, categoryId?: ID) {
+  try {
+    localStorage.setItem(LAST_PAY, accountId)
+    if (categoryId) localStorage.setItem(PAY_BY_CAT, JSON.stringify({ ...readPayByCat(), [categoryId]: accountId }))
+  } catch { /* ignore */ }
+}
+/** Default expense account: last used for this category, else last used for any expense, else the first bank/cash. */
+export function defaultPayMethod(accounts: Account[], categoryId?: ID): ID | undefined {
+  const active = accounts.filter((a) => !a.archived)
+  let last: string | null = null
+  try { last = localStorage.getItem(LAST_PAY) } catch { /* ignore */ }
+  const byCat = categoryId ? readPayByCat()[categoryId] : undefined
+  return [byCat, last].map((id) => active.find((a) => a.id === id)?.id).find(Boolean)
+    ?? (active.find((a) => a.kind !== 'credit_card') ?? active[0])?.id
 }
 
 /** Drop undefined / empty-string optional fields so stored objects stay tidy. */

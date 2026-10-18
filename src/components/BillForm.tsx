@@ -7,8 +7,9 @@ import { savePlan } from '../actions'
 import { newId } from '../db'
 import { moneyToInput } from '../lib/format'
 import { FREQ_LABEL } from '../lib/plans'
-import { AccountSelect, CategorySelect, Field, FormError, MoneyInput, Segmented, Sheet } from './ui'
-import { needsAccountPicker } from '../lib/accounts'
+import { CategorySelect, Field, FormError, MoneyInput, Segmented, Sheet } from './ui'
+import { PayMethodChips } from './PayMethod'
+import { AccountFormSheet } from './AccountForm'
 import { BillIcon } from './BillIcon'
 
 const TYPES = Object.keys(BILL_TYPE_LABEL) as BillType[]
@@ -52,7 +53,7 @@ export function BillFormSheet({ snap, plan, initialType = 'electricity', onClose
   const shownName = nameTouched ? name : billDefaultName(type, provider.trim() || undefined)
   const suggestions = BILL_PROVIDERS.filter((p) => p.type === type)
   const isRent = type === 'rent'
-  const showAccount = needsAccountPicker(snap.accounts)
+  const [addingCard, setAddingCard] = useState(false)
 
   const chooseType = (t: BillType) => {
     setType(t)
@@ -147,15 +148,15 @@ export function BillFormSheet({ snap, plan, initialType = 'electricity', onClose
         <Field label="Ad">
           <input className="input" value={shownName} onChange={(e) => { setNameTouched(true); setName(e.target.value) }} placeholder={isRent ? 'ör. Ev kirası' : 'ör. Ev elektriği'} />
         </Field>
-        <div className={showAccount ? 'grid grid-cols-2 gap-3' : ''}>
-          {showAccount && (
-            <Field label="Ödeyen hesap / kart">
-              <AccountSelect accounts={snap.accounts} value={accountId} onChange={setAccountId} allowEmpty={accountId ? undefined : 'Seçin'} />
-            </Field>
+        <Field label="Kategori">
+          <CategorySelect categories={snap.categories} kind="expense" value={categoryId} onChange={setCategoryId} />
+        </Field>
+        <div>
+          <span className="label">Ödeme yöntemi</span>
+          <PayMethodChips accounts={snap.accounts} value={accountId} onChange={setAccountId} onAddCard={() => setAddingCard(true)} />
+          {snap.accounts.some((a) => a.id === accountId && a.kind === 'credit_card') && (
+            <div className="mt-1 text-xs text-slate-500">Kartla ödenen fatura karta harcama olarak işlenir; ekstreyle ödenir.</div>
           )}
-          <Field label="Kategori">
-            <CategorySelect categories={snap.categories} kind="expense" value={categoryId} onChange={setCategoryId} />
-          </Field>
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={autopay} onChange={(e) => setAutopay(e.target.checked)} />
@@ -216,6 +217,7 @@ export function BillFormSheet({ snap, plan, initialType = 'electricity', onClose
         <FormError msg={err} />
         <button className="btn btn-primary w-full">Kaydet</button>
       </form>
+      {addingCard && <AccountFormSheet quickCard onSaved={setAccountId} onClose={() => setAddingCard(false)} />}
     </Sheet>
   )
 }

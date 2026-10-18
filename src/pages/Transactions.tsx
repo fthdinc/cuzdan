@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { formatMoney, todayISO, type Snapshot, type Transaction, type TxKind } from '../domain'
+import { formatMoney, suspectedCardPayments, todayISO, type Snapshot, type Transaction, type TxKind } from '../domain'
 import { Amount, CategoryDot, Empty, PageHeader } from '../components/ui'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { QuickAdd } from '../components/QuickAdd'
 import { TxFormSheet } from '../components/TxForm'
-import { fmtDate, monthLabel, shiftMonth, sortCategories, weekday } from '../lib/format'
+import { fmtDate, sortCategories, weekday } from '../lib/format'
+import { readDismissedCardPayments } from '../lib/cardPayments'
+import { MonthSwitcher } from '../components/MonthPicker'
 
 export function TransactionsPage({ snap }: { snap: Snapshot }) {
   const [editing, setEditing] = useState<Transaction | 'new' | null>(null)
@@ -43,6 +45,9 @@ function TxList({ snap, onEdit }: { snap: Snapshot; onEdit: (t: Transaction) => 
   const [categoryId, setCategoryId] = useState('')
   const [kind, setKind] = useState<'' | TxKind>('')
 
+  const txMonths = new Set(snap.transactions.map((t) => t.date.slice(0, 7)))
+  const dismissed = readDismissedCardPayments()
+  const suspects = new Set(suspectedCardPayments(snap).map((t) => t.id).filter((id) => !dismissed.includes(id)))
   const list = snap.transactions
     .filter((t) => t.date.startsWith(month))
     .filter((t) => !accountId || t.accountId === accountId || t.toAccountId === accountId)
@@ -60,16 +65,11 @@ function TxList({ snap, onEdit }: { snap: Snapshot; onEdit: (t: Transaction) => 
 
   return (
     <div className="space-y-3">
-      <div className="card flex items-center justify-between p-2">
-        <button className="btn btn-ghost px-3" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Önceki ay">‹</button>
-        <div className="text-center">
-          <div className="font-semibold">{monthLabel(month)}</div>
-          <div className="text-xs tabular-nums">
-            <Amount value={income} tone="income" /> <span className="text-slate-400">/</span> <Amount value={-expense} tone="expense" />
-          </div>
+      <MonthSwitcher month={month} onChange={setMonth} current={today.slice(0, 7)} hasData={(m) => txMonths.has(m)}>
+        <div className="text-xs tabular-nums">
+          <Amount value={income} tone="income" /> <span className="text-slate-400">/</span> <Amount value={-expense} tone="expense" />
         </div>
-        <button className="btn btn-ghost px-3" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Sonraki ay">›</button>
-      </div>
+      </MonthSwitcher>
 
       <div className="flex flex-wrap gap-2">
         {snap.accounts.length > 1 && (
@@ -96,7 +96,7 @@ function TxList({ snap, onEdit }: { snap: Snapshot; onEdit: (t: Transaction) => 
               {fmtDate(date, today)}, {weekday(date)}
             </div>
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {txs.map((t) => <TxRow key={t.id} t={t} snap={snap} onClick={() => onEdit(t)} />)}
+              {txs.map((t) => <TxRow key={t.id} t={t} snap={snap} suspect={suspects.has(t.id)} onClick={() => onEdit(t)} />)}
             </ul>
           </div>
         ))
@@ -105,7 +105,7 @@ function TxList({ snap, onEdit }: { snap: Snapshot; onEdit: (t: Transaction) => 
   )
 }
 
-function TxRow({ t, snap, onClick }: { t: Transaction; snap: Snapshot; onClick: () => void }) {
+function TxRow({ t, snap, suspect, onClick }: { t: Transaction; snap: Snapshot; suspect: boolean; onClick: () => void }) {
   const acc = (id?: string) => snap.accounts.find((a) => a.id === id)?.name ?? '?'
   const cat = snap.categories.find((c) => c.id === t.categoryId)
   const debt = t.debtId ? snap.debts?.find((d) => d.id === t.debtId) : undefined
@@ -129,6 +129,12 @@ function TxRow({ t, snap, onClick }: { t: Transaction; snap: Snapshot; onClick: 
         <CategoryDot color={t.debtId ? '#f59e0b' : t.kind === 'transfer' ? '#6366f1' : t.kind === 'adjustment' ? '#94a3b8' : cat?.color} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">
+            {suspect && (
+              <svg viewBox="0 0 24 24" className="mr-1 inline h-4 w-4 -translate-y-px text-amber-500" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Kart ödemesi olabilir">
+                <title>Kart ödemesi gibi görünüyor; gider sayılırsa harcamalar iki kez sayılır</title>
+                <path d="M12 3l10 18H2L12 3zM12 10v5M12 18h.01" />
+              </svg>
+            )}
             {title}
             {t.note && !described && <span className="font-normal text-slate-500"> · {t.note}</span>}
           </div>
