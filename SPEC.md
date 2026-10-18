@@ -81,3 +81,7 @@ kendi ana sekmesinde ("Faturalar") yönetilir. Veri modeli olarak `recurring_exp
   aynı tarih/tutar/notla transfere çevirir, "Gider olarak kalsın" uyarıyı o işlem için kapatır.
 - Özet: Harcanan altında "Kartla / Nakit-banka" dağılımı; kart borcu varsa Toplam bakiye altında gösterilir. Kart limiti opsiyoneldir
   (bilinmiyorsa asgari oran %20).
+- Özet ay kartı (v1.4): Bu ay gelir, Harcanan (alışverişler, kart dahil, yapıldığı ay), Hesaptan çıkan (banka/nakit giderleri +
+  kart ödemeleri; banka/nakit arası transferler, düzeltmeler ve borçla ilgili işlemler hariç), Kalan = gelir - hesaptan çıkan.
+  Çubuk: "Gelirinin %X'i hesabından çıktı". İşlemler'de kart ödemesi satırı "Kart ödemesi" başlığı ve kırmızı eksi tutarla gösterilir;
+  "Seç" ile toplu ödeme yöntemi / kategori değişikliği ve silme yapılır.

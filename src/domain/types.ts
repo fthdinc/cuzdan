@@ -183,7 +183,10 @@ export interface MonthSummary {
   income: Kurus
   expense: Kurus // expense tx + card installment parts billed in this month's statements
   cardExpense: Kurus // part of expense made on credit cards (card expense tx + billed installment parts)
-  net: Kurus
+  net: Kurus // income - expense (accrual: card purchases count when made)
+  cashOut: Kurus // left bank/cash this month: expense tx on bank/cash accounts + card payments (debt-linked tx excluded)
+  cardPayments: Kurus // part of cashOut: transfers from bank/cash to credit cards
+  cashNet: Kurus // income - cashOut ("Kalan" on Özet)
   projectedIncome: Kurus // pending recurring_income occurrences in month
   projectedExpense: Kurus // pending/overdue/autopay_pending loan + recurring_expense occurrences due in month (card spending is already in expense)
   byCategory: { categoryId: ID | null; amount: Kurus }[] // expenses only

@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import Dexie from 'dexie'
 import { beforeAll, describe, expect, it } from 'vitest'
-import type { PersonalDebt } from './domain'
+import type { PersonalDebt, Plan } from './domain'
 
 // The app DB module opens 'cuzdan' at its latest version; seed a v1 database first to check the upgrade keeps data.
 let mod: typeof import('./db')
@@ -114,5 +114,35 @@ describe('card payments', () => {
   it('backup accepts a card without a limit', () => {
     const acc = { id: 'c', name: 'K', kind: 'credit_card', openingBalance: 0, openingDate: '2026-10-01', card: { statementDay: 5, dueDaysAfterStatement: 10 } }
     expect(() => mod.validateBackup({ accounts: [acc], transactions: [], plans: [], categories: [] })).not.toThrow()
+  })
+})
+
+describe('bulk edit', () => {
+  it('bulkUpdateTx patches only the given tx (occurrenceKey kept); empty categoryId clears it; bulkDeleteTx removes them', async () => {
+    await mod.db.transactions.bulkPut([
+      { id: 'u1', date: '2026-10-05', kind: 'expense', amount: 100, accountId: 'b', categoryId: 'food', occurrenceKey: 'p:0', createdAt: 1 },
+      { id: 'u2', date: '2026-10-06', kind: 'expense', amount: 200, accountId: 'b', categoryId: 'food', createdAt: 2 },
+      { id: 'u3', date: '2026-10-07', kind: 'expense', amount: 300, accountId: 'b', categoryId: 'food', createdAt: 3 },
+    ])
+    await actions.bulkUpdateTx(['u1', 'u2'], { accountId: 'card' })
+    expect(await mod.db.transactions.get('u1')).toMatchObject({ accountId: 'card', occurrenceKey: 'p:0', categoryId: 'food' })
+    expect(await mod.db.transactions.get('u2')).toMatchObject({ accountId: 'card' })
+    expect(await mod.db.transactions.get('u3')).toMatchObject({ accountId: 'b' })
+    await actions.bulkUpdateTx(['u2'], { categoryId: '' })
+    expect('categoryId' in (await mod.db.transactions.get('u2'))!).toBe(false)
+    await actions.bulkDeleteTx(['u1', 'u2'])
+    expect((await mod.db.transactions.bulkGet(['u1', 'u2', 'u3'])).map((t) => t?.id)).toEqual([undefined, undefined, 'u3'])
+  })
+
+  it('withPlans also moves the linked plans to the new payment method (future occurrences), other plans untouched', async () => {
+    const plans: Plan[] = [
+      { id: 'bp', kind: 'recurring_expense', name: 'Elektrik', accountId: 'b', active: true, createdAt: 0, amount: 100, variable: true, frequency: 'monthly', startDate: '2026-10-01' },
+      { id: 'op', kind: 'recurring_expense', name: 'Su', accountId: 'b', active: true, createdAt: 0, amount: 100, variable: true, frequency: 'monthly', startDate: '2026-10-01' },
+    ]
+    await mod.db.plans.bulkPut(plans)
+    await mod.db.transactions.put({ id: 'w1', date: '2026-10-05', kind: 'expense', amount: 100, accountId: 'b', occurrenceKey: 'bp:0', createdAt: 1 })
+    await actions.bulkUpdateTx(['w1'], { accountId: 'card' }, { withPlans: true })
+    expect(await mod.db.plans.get('bp')).toMatchObject({ accountId: 'card' })
+    expect(await mod.db.plans.get('op')).toMatchObject({ accountId: 'b' })
   })
 })

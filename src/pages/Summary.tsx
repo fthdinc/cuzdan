@@ -59,11 +59,14 @@ function liquidBalance(snap: Snapshot, today: string) {
   }
 }
 
-/** This month: income, spent, what is left (income - expense), spent/income bar, then the carried-over total balance. */
+/**
+ * This month: income, spent (purchases incl. card), what left bank/cash (expenses + card payments), what is left
+ * (income - left), left/income bar, then the carried-over total balance.
+ */
 function MonthCard({ snap }: { snap: Snapshot }) {
   const today = todayISO()
   const m = monthSummary(snap, today.slice(0, 7), today)
-  const ratio = m.income > 0 ? m.expense / m.income : null
+  const ratio = m.income > 0 ? m.cashOut / m.income : null
   const pct = ratio === null ? 0 : Math.round(ratio * 100)
   const { balance, overdraftLimit } = liquidBalance(snap, today)
   const used = Math.max(0, -balance)
@@ -71,20 +74,23 @@ function MonthCard({ snap }: { snap: Snapshot }) {
   return (
     <div>
       <div className="mb-3 text-sm font-semibold text-slate-500 dark:text-slate-400">{monthLabel(m.month)}</div>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-2 lg:grid-cols-4">
         <Stat label="Bu ay gelir" value={<Amount value={m.income} tone="income" />} />
-        <Stat label="Harcanan" value={<Amount value={m.expense} tone="expense" />} sub={m.cardExpense > 0 ? (
-          <>Kartla: {formatMoneyShort(m.cardExpense)} · Nakit/banka: {formatMoneyShort(m.expense - m.cardExpense)}</>
+        <Stat label="Harcanan" caption="alışverişler" value={<Amount value={m.expense} tone="expense" />} sub={m.cardExpense > 0 ? (
+          <><span className="whitespace-nowrap">Kartla: {formatMoneyShort(m.cardExpense)}</span> · <span className="whitespace-nowrap">Nakit/banka: {formatMoneyShort(m.expense - m.cardExpense)}</span></>
         ) : undefined} />
-        <Stat label="Kalan" value={<Amount value={m.net} tone={m.net < 0 ? 'expense' : 'income'} />} />
+        <Stat label="Hesaptan çıkan" caption="nakit + kart ödemeleri" value={<Amount value={m.cashOut} tone="expense" />}
+          sub={m.cardPayments > 0 ? <>Kart ödemeleri: <span className="whitespace-nowrap">{formatMoneyShort(m.cardPayments)}</span></> : undefined} />
+        <Stat label="Kalan" value={<Amount value={m.cashNet} tone={m.cashNet < 0 ? 'expense' : 'income'} />} />
       </div>
       <div className="mt-3">
         <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
           <span className="font-medium">
-            {ratio === null ? (m.expense > 0 ? 'Bu ay henüz gelir girilmedi' : 'Bu ay henüz gelir yok') : `Gelirinin %${pct}'${percentSuffix(pct)} harcadın`}
+            {/* percentSuffix gives the accusative (%30'unu); drop its last two letters for the possessive (%30'u). */}
+            {ratio === null ? (m.cashOut > 0 ? 'Bu ay henüz gelir girilmedi' : 'Bu ay henüz gelir yok') : `Gelirinin %${pct}'${percentSuffix(pct).slice(0, -2)} hesabından çıktı`}
           </span>
         </div>
-        <ProgressBar value={ratio ?? (m.expense > 0 ? 1 : 0)} tone={ratio === null ? (m.expense > 0 ? 'red' : 'green') : ratio > 1 ? 'red' : ratio > 0.8 ? 'amber' : 'green'} />
+        <ProgressBar value={ratio ?? (m.cashOut > 0 ? 1 : 0)} tone={ratio === null ? (m.cashOut > 0 ? 'red' : 'green') : ratio > 1 ? 'red' : ratio > 0.8 ? 'amber' : 'green'} />
       </div>
       {(m.projectedIncome > 0 || m.projectedExpense > 0) && (
         <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
@@ -116,14 +122,13 @@ function MonthCard({ snap }: { snap: Snapshot }) {
   )
 }
 
-function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
+function Stat({ label, caption, value, sub }: { label: string; caption?: string; value: ReactNode; sub?: ReactNode }) {
   return (
-    // Phone: one row per figure (amounts stay unclipped); wider screens: three tiles.
-    <div className="rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-950/60 sm:p-3">
-      <div className="flex items-baseline justify-between gap-2 sm:block">
-        <div className="text-sm text-slate-500 dark:text-slate-400 sm:text-xs">{label}</div>
-        <div className="text-xl font-semibold sm:mt-1">{value}</div>
-      </div>
+    // 2x2 tiles; four in a row where they fit (sm without the sidebar, lg with it).
+    <div className="min-w-0 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-950/60 sm:p-3">
+      <div className="text-xs text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="mt-1 text-lg font-semibold leading-tight">{value}</div>
+      {caption && <div className="text-[11px] text-slate-400">{caption}</div>}
       {sub && <div className="mt-0.5 text-[11px] tabular-nums text-slate-500 dark:text-slate-400">{sub}</div>}
     </div>
   )

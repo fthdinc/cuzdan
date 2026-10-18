@@ -89,6 +89,32 @@ export async function deleteTx(id: ID): Promise<void> {
   await db.transactions.delete(id)
 }
 
+/** Bulk edit (İşlemler "Seç"): sets accountId and/or categoryId ('' = uncategorized) on every tx in ids. Atomic. */
+export async function bulkUpdateTx(ids: ID[], patch: { accountId?: ID; categoryId?: ID | '' }, opts: { withPlans?: boolean } = {}): Promise<void> {
+  await db.transaction('rw', db.transactions, db.plans, async () => {
+    await db.transactions.where('id').anyOf(ids).modify((t) => {
+      if (patch.accountId) t.accountId = patch.accountId
+      if (patch.categoryId !== undefined) {
+        if (patch.categoryId) t.categoryId = patch.categoryId
+        else delete t.categoryId
+      }
+    })
+    // withPlans: plans settled by these tx (bills etc.) are paid the same way from now on.
+    if (opts.withPlans && patch.accountId) {
+      const keys = (await db.transactions.bulkGet(ids)).map((t) => t?.occurrenceKey).filter((k): k is string => !!k)
+      const planIds = [...new Set(keys.map((k) => k.slice(0, k.lastIndexOf(':'))))]
+      if (planIds.length) await db.plans.where('id').anyOf(planIds).modify({ accountId: patch.accountId })
+    }
+  })
+}
+
+/** Bulk delete; like deleteTx it removes only the tx (settled plan occurrences become open again). Atomic. */
+export async function bulkDeleteTx(ids: ID[]): Promise<void> {
+  await db.transaction('rw', db.transactions, async () => {
+    await db.transactions.bulkDelete(ids)
+  })
+}
+
 /** Settle a loan / recurring plan occurrence. No-op (returns false) if it is already settled. */
 export async function payOccurrence(plan: Plan, occ: Occurrence, amount: Kurus, accountId: ID, date: ISODate): Promise<boolean> {
   return db.transaction('rw', db.transactions, async () => {
